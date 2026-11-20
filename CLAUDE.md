@@ -33,6 +33,7 @@ User-facing setup and usage docs are in `README.md`. Private links (sheet ID, sc
 - **Days column:** `availableOn()` hides a chore on other days unless it's already done. `daysText()` shows "Mon or Tue · due today" or "last chance today". The trash bins chore is `Mon, Tue`.
 - **Wording:** the UI says "Family Jobs" and "jobs" (user asked for something more kid-friendly than chores). Code, sheet tab and IDs still say chores.
 - **Done earlier?:** weekly/monthly rows have a link that opens the picker with a date (back 35 days, or 92 for monthly). It posts a normal `done` record dated that day, with no bonus.
+- **Taking turns:** Owner can be `Tracy/Billy` (split on `/ , & + and`). `ownerOn(c, date)` picks `owners[(periodIndex - periodIndex(ROT_ANCHOR)) % n]`, where ROT_ANCHOR is 2026-11-16. Use `ownerOn`, never `c.owner`, for anything per person. Every Tracy and Billy job takes turns except their personal ones (papers, living-room pickup, closet). The user wanted this so nobody gets stuck with the same jobs.
 - **History tab:** 7-day rates for each person's own daily chores, the "Being skipped" list, and a 14-day daily log.
 
 ## Decisions the user made (keep these)

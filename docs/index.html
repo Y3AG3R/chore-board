@@ -310,8 +310,19 @@ let view = 'today', roomFilter = 'all';
 let api = store.get('api');
 let syncState = api ? 'loading' : 'nosetup', lastSync = 0, busy = false;
 
+// Owner can name more than one person ("Tracy/Billy"). Those jobs take turns: daily ones switch every day,
+// weekly ones every Monday, monthly ones on the 1st. The first name has the turn in the week of ROT_ANCHOR.
+const ROT_ANCHOR = new Date(2026, 10, 16);
+const parseOwners = o => String(o || '').split(/\s*(?:\/|,|&|\+|\band\b)\s*/i).map(x => x.trim()).filter(x => PBY[x]);
+function ownerOn(c, d) {
+  const o = c.owners || [];
+  if (o.length < 2) return o[0] || c.owner;
+  const i = periodIndex(c.freq, d) - periodIndex(c.freq, ROT_ANCHOR);
+  return o[((i % o.length) + o.length) % o.length];
+}
+const rotates = c => (c.owners || []).length > 1;
 function setChores(list) {
-  CHORES = (list && list.length ? list : STARTER_CHORES).map(c => ({ ...c, pts: Number(c.pts) || 0 }));
+  CHORES = (list && list.length ? list : STARTER_CHORES).map(c => ({ ...c, pts: Number(c.pts) || 0, owners: parseOwners(c.owner) }));
   CBY = Object.fromEntries(CHORES.map(c => [c.id, c]));
   ROOMS = [...new Set(CHORES.map(c => c.room))];
 }
@@ -409,9 +420,9 @@ function renderWho() {
 
 function pointsBetween(m, who, from, to) { let t = 0; for (const c of m.values()) if (c.person === who && c.date >= from && c.date <= to) t += Number(c.pts) || 0; return t; }
 function streak(m, who, now) {
-  const daily = CHORES.filter(c => c.owner === who && c.freq === 'd');
+  const daily = CHORES.filter(c => c.owners.includes(who) && c.freq === 'd');
   if (!daily.length) return 0;
-  const allDone = d => daily.filter(c => availableOn(c, d)).every(c => m.has(docId(c, d)));
+  const allDone = d => daily.filter(c => ownerOn(c, d) === who && availableOn(c, d)).every(c => m.has(docId(c, d)));
   let d = allDone(now) ? now : addDays(now, -1), n = 0;
   while (n < 31 && allDone(d)) { n++; d = addDays(d, -1); }
   return n;
@@ -457,7 +468,7 @@ function dailyTargets(m, now) {
   const pool = skipped.concat(notYet).filter(x => availableOn(x.c, now));
   // One for each person first, from their own chores; anyone with nothing eligible gives their slot to the next best pick.
   const picks = [];
-  for (const p of PEOPLE) { const x = pool.find(y => y.c.owner === p.id); if (x) picks.push(x); }
+  for (const p of PEOPLE) { const x = pool.find(y => ownerOn(y.c, now) === p.id); if (x) picks.push(x); }
   for (const x of pool) { if (picks.length >= TARGETS_PER_DAY) break; if (!picks.includes(x)) picks.push(x); }
   return new Map(picks.slice(0, Math.max(TARGETS_PER_DAY, PEOPLE.length)).map(x => [x.c.id, x.n >= 2 ? 0.5 : 0.25]));
 }
@@ -486,15 +497,15 @@ const skipText = (c, n) => `Skipped ${n > 1 ? n + ' ' + UNIT[c.freq] + 's' : UNI
 // ---------- Today ----------
 function choreRow(c, m, now, targets) {
   const done = m.get(docId(c, now));
-  const owner = person(c.owner);
+  const owner = person(ownerOn(c, now));
   const share = targets.get(c.id) || 0, b = bonusFor(c, share);
-  let sub = `<span>${esc(c.room)}</span><span aria-hidden="true">·</span><span class="owner-tag"><span class="dot" style="${pVars(owner)}"></span>${esc(owner.id)}</span>`;
+  let sub = `<span>${esc(c.room)}</span><span aria-hidden="true">·</span><span class="owner-tag"><span class="dot" style="${pVars(owner)}"></span>${esc(owner.id)}${rotates(c) ? '\'s turn' : ''}</span>`;
   if (c.days && !done && c.freq !== 'd') sub += `<span aria-hidden="true">·</span><span class="when">${esc(daysText(c, now))}</span>`;
   if (done) sub += `<span aria-hidden="true">·</span><span class="done-by">Done by ${esc(person(done.person).id)}</span><button class="undo" data-undo="${esc(c.id)}">Undo</button>`;
   const n = done ? 0 : skips(c, m, now);
   if (n) sub += `<span aria-hidden="true">·</span><span class="skipped">${skipText(c, n)}</span>`;
   if (!done && c.freq !== 'd') sub += `<button class="undo" data-earlier="${esc(c.id)}">Done earlier?</button>`;
-  else if (!done && !share && me !== 'shared' && c.owner !== me) sub += `<span aria-hidden="true">·</span><span class="bounty">Do it and the points are yours</span>`;
+  else if (!done && !share && me !== 'shared' && ownerOn(c, now) !== me) sub += `<span aria-hidden="true">·</span><span class="bounty">Do it and the points are yours</span>`;
   const pts = done ? done.pts : c.pts + b;
   const shown = done ? done.bonus : b;
   const ptsBlock = shown ? `<span class="pts-stack">${ptsHtml(pts)}<span class="bonus">+${shown} bonus</span></span>` : ptsHtml(pts);
@@ -511,7 +522,7 @@ function renderToday(m, now) {
   const wk = weekStart(now), weekFrom = dayKey(wk), today = dayKey(now);
   const targets = dailyTargets(m, now);
   const cards = PEOPLE.map(p => {
-    const list = CHORES.filter(c => c.owner === p.id && (availableOn(c, now) || m.has(docId(c, now))));
+    const list = CHORES.filter(c => ownerOn(c, now) === p.id && (availableOn(c, now) || m.has(docId(c, now))));
     const doneN = list.filter(c => m.has(docId(c, now))).length;
     const pct = list.length ? Math.round(doneN / list.length * 100) : 0;
     const s = streak(m, p.id, now);
@@ -525,7 +536,7 @@ function renderToday(m, now) {
   const targetsDone = targetList.filter(c => m.has(docId(c, now))).length;
   const targetHtml = targetList.length ? `<div class="group"><div class="group-head"><h2>Today's bonus jobs</h2><span>${targetsDone}/${targetList.length} done · new picks tomorrow</span></div>
       <div class="list">${targetList.map(c => choreRow(c, m, now, targets)).join('')}</div></div>` : '';
-  const pool = CHORES.filter(c => !targets.has(c.id) && (availableOn(c, now) || m.has(docId(c, now))) && (ownerFilter === 'all' || c.owner === ownerFilter) && (roomFilter === 'all' || c.room === roomFilter));
+  const pool = CHORES.filter(c => !targets.has(c.id) && (availableOn(c, now) || m.has(docId(c, now))) && (ownerFilter === 'all' || ownerOn(c, now) === ownerFilter) && (roomFilter === 'all' || c.room === roomFilter));
   const daysLeftWeek = 7 - Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - wk) / 864e5);
   const daysLeftMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1;
   const plural = n => n === 1 ? '' : 's';
@@ -577,9 +588,10 @@ function renderHistory(m, now) {
   // How each person did on their own daily chores over the last 7 days
   const days7 = [...Array(7)].map((_, i) => addDays(now, i - 6)).filter(d => dayKey(d) >= start);
   const rates = PEOPLE.map(p => {
-    const own = CHORES.filter(c => c.owner === p.id && c.freq === 'd');
-    const exp = days7.reduce((t, d) => t + own.filter(c => availableOn(c, d)).length, 0);
-    const got = days7.reduce((t, d) => t + own.filter(c => availableOn(c, d) && m.has(docId(c, d))).length, 0);
+    const own = CHORES.filter(c => c.owners.includes(p.id) && c.freq === 'd');
+    const mineOn = (c, d) => ownerOn(c, d) === p.id && availableOn(c, d);
+    const exp = days7.reduce((t, d) => t + own.filter(c => mineOn(c, d)).length, 0);
+    const got = days7.reduce((t, d) => t + own.filter(c => mineOn(c, d) && m.has(docId(c, d))).length, 0);
     const pct = exp ? Math.round(got / exp * 100) : 0;
     return `<div class="sum-card rate" style="${pVars(p)}"><div class="sum-top"><span class="sum-name">${avatar(p)}${esc(p.id)}</span><span class="pts">${pct}%</span></div>
       <div class="bar"><span style="width:${pct}%"></span></div><div class="sum-meta">${got} of ${exp} daily jobs</div></div>`;
@@ -593,7 +605,7 @@ function renderHistory(m, now) {
   };
   const skipped = CHORES.map(c => ({ c, n: skips(c, m, now) })).filter(x => x.n).sort((a, b) => b.n - a.n || b.c.pts - a.c.pts);
   const skippedHtml = skipped.length ? `<div class="list">${skipped.slice(0, 15).map(({ c, n }) => {
-      const o = person(c.owner), share = targets.get(c.id);
+      const o = person(ownerOn(c, now)), share = targets.get(c.id);
       return `<div class="chore${share ? ' target' : ''}"><div class="chore-main">${share ? `<span class="target-badge">Today's bonus job +${Math.round(share * 100)}%</span>` : ''}<span class="chore-name">${esc(c.name)}</span>
         <span class="chore-sub"><span>${esc(c.room)}</span><span aria-hidden="true">·</span><span class="owner-tag"><span class="dot" style="${pVars(o)}"></span>${esc(o.id)}</span><span aria-hidden="true">·</span><span class="skipped">${skipText(c, n)}</span><span aria-hidden="true">·</span><span>${esc(lastText(c))}</span></span></div>
         ${ptsHtml(c.pts + bonusFor(c, share))}</div>`;
@@ -625,23 +637,24 @@ function renderHistory(m, now) {
 // ---------- Plan ----------
 function renderPlan() {
   const bal = PEOPLE.map(p => {
-    const mine = CHORES.filter(c => c.owner === p.id);
-    const wk = Math.round(mine.reduce((t, c) => t + (c.freq === 'd' ? c.pts * 7 : c.freq === 'w' ? c.pts : c.pts / 4.3), 0));
-    const n = f => mine.filter(c => c.freq === f).length;
+    const mine = CHORES.filter(c => c.owners.includes(p.id));
+    const wk = Math.round(mine.reduce((t, c) => t + (c.freq === 'd' ? c.pts * 7 : c.freq === 'w' ? c.pts : c.pts / 4.3) / c.owners.length, 0));
+    const n = f => mine.filter(c => c.freq === f).length, shared = mine.filter(rotates).length;
     return `<div class="sum-card" style="${pVars(p)}"><div class="sum-top"><span class="sum-name">${avatar(p)}${esc(p.id)}</span>${ptsHtml(wk)}</div>
-      <div class="sum-meta">${mine.length} jobs: ${n('d')} daily, ${n('w')} weekly, ${n('m')} monthly · about ${wk} points a week</div></div>`;
+      <div class="sum-meta">${mine.length} jobs: ${n('d')} daily, ${n('w')} weekly, ${n('m')} monthly${shared ? ` · ${shared} take turns` : ''} · about ${wk} points a week</div></div>`;
   }).join('');
   const rooms = ROOMS.map(r => {
     const list = CHORES.filter(c => c.room === r);
     return `<div class="room"><h3>${esc(r)} <span>${list.length} jobs</span></h3><ul>${list.map(c => {
-      const p = person(c.owner);
-      return `<li><span class="freq">${FREQ[c.freq]}</span><span>${esc(c.name)}${choreDays(c) ? ` <span class="when">(${esc(daysText(c, new Date(2000, 0, 2)))})</span>` : ''}</span><span class="owner-tag" title="${esc(p.id)}"><span class="dot" style="${pVars(p)}"></span>${esc(p.id[0])}</span>${ptsHtml(c.pts)}</li>`;
+      const ps = (c.owners.length ? c.owners : [c.owner]).map(person), title = ps.map(p => p.id).join(' and ') + (rotates(c) ? ' take turns' : '');
+      return `<li><span class="freq">${FREQ[c.freq]}</span><span>${esc(c.name)}${choreDays(c) ? ` <span class="when">(${esc(daysText(c, new Date(2000, 0, 2)))})</span>` : ''}</span><span class="owner-tag" title="${esc(title)}">${ps.map(p => `<span class="dot" style="${pVars(p)}"></span>`).join('')}${esc(ps.map(p => p.id[0]).join('/'))}</span>${ptsHtml(c.pts)}</li>`;
     }).join('')}</ul></div>`;
   }).join('');
   document.getElementById('view-plan').innerHTML = `
     <div class="plan-intro"><h2>How the board works</h2>
       <p>Every job has an owner and a point value: 5 for quick jobs, 10 to 15 for medium ones, 20 to 30 for big cleans. Daily jobs reset at midnight, weekly ones on Monday, monthly ones on the 1st.</p>
       <p>Anyone can do anyone's job. Whoever checks it off gets the points. If a weekly or monthly job got done on an earlier day, tap <strong>Done earlier?</strong> under it to record the day. To change jobs, owners or points, edit the Chores tab in the Google Sheet.</p>
+      <p>A job with two names as its owner, like Tracy/Billy, takes turns. Daily jobs switch every day, weekly ones every Monday and monthly ones on the 1st, so nobody gets stuck with the same jobs.</p>
       <p>Each day the board picks one bonus job for each person from their own jobs that were skipped or haven't been done yet this week or month. A bonus job is worth 25% more, or 50% more if it was skipped two or more times in a row. The picks change every day.</p></div>
     <div class="balance">${bal}</div>
     <div class="legend">${PEOPLE.map(p => `<span class="owner-tag"><span class="dot" style="${pVars(p)}"></span>${esc(p.id)}</span>`).join('')}<span>★ points</span></div>

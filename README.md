@@ -57,6 +57,7 @@ Every check-off is a row on the **Completions** tab, so the sheet is also a full
 - Each day the board picks one **bonus chore** for each person, from their own chores that were skipped or haven't been done yet this week or month. If someone has nothing eligible, their slot goes to another chore. A bonus chore is worth 25% more, or 50% more if it was skipped two or more times in a row. The picks rotate daily, and every device shows the same ones.
 - Bonuses are recorded in the **Bonus** column of the Completions tab.
 - If a weekly or monthly job got done on an earlier day without being checked off, tap **Done earlier?** under it, pick the day and who did it. It counts for that day's week or month (no bonus), so the skip count and "last done" date stay right.
+- **Taking turns:** an Owner with two names, like `Tracy/Billy`, makes the job switch between them: daily jobs every day, weekly jobs every Monday, monthly jobs on the 1st. The first name has the turn in the week of Nov 16, 2026, which is the anchor. The board shows "Tracy's turn". Today cards, streaks, bonus picks and the 7-day rate all follow whose turn it is.
 - A Days column that limits a daily job to some days (like homework on weekdays) also leaves those days out of streaks and the 7-day rate.
 - A new chore added to the sheet counts as skipped from the board's first day until someone does it once.
 
