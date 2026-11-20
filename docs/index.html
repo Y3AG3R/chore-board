@@ -111,6 +111,7 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
 .chore.target { background: var(--target-bg); box-shadow: inset 4px 0 0 var(--star); }
 .target-badge { justify-self: start; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--target-ink); }
 .skipped { color: var(--warn); font-weight: 600; }
+.when { color: var(--accent); font-weight: 600; }
 .pts-stack { display: grid; justify-items: end; gap: 0; }
 .bonus { font-size: 0.72rem; font-weight: 700; color: var(--target-ink); white-space: nowrap; }
 
@@ -266,7 +267,7 @@ const STARTER = [
   ['Living Room', [['living-pillows','Fluff pillows & fold blankets','d',5,'V'],['living-pickup','Evening 5-minute pickup','d',5,'B'],['living-vacuum','Vacuum rug & floors','w',15,'B'],['living-dust','Dust shelves, TV stand & tables','w',10,'T'],['living-remotes','Wipe remotes, switches & door knobs','m',5,'V'],['living-couch','Vacuum under couch cushions','m',15,'B']]],
   ['Playroom', [['play-toys','Put toys back in their bins','d',5,'V'],['play-shelves','Organize bins & shelves','w',10,'V'],['play-table','Wipe table & art area','w',5,'V'],['play-vacuum','Vacuum the floor','w',10,'T'],['play-declutter','Sort out broken or outgrown toys','m',20,'T']]],
   ['Hallway & Stairs', [['stairs-clear','Carry up anything left on the stairs','d',5,'V'],['stairs-vacuum','Vacuum hallway & stairs','w',15,'B'],['stairs-rail','Wipe the handrail','w',5,'V'],['stairs-baseboards','Dust baseboards','m',15,'T']]],
-  ['Kitchen', [['kitchen-load','Load & run the dishwasher','d',10,'B'],['kitchen-unload','Unload the dishwasher','d',10,'T'],['kitchen-counters','Wipe counters & stovetop','d',5,'T'],['kitchen-sweep','Sweep the floor','d',5,'B'],['kitchen-trash','Take out trash & recycling','w',10,'B'],['kitchen-mop','Mop the floor','w',15,'B'],['kitchen-microwave','Clean the microwave','w',10,'T'],['kitchen-fridge','Clear out old food from the fridge','w',15,'T'],['kitchen-fronts','Wipe appliance fronts & cabinet handles','w',5,'V'],['kitchen-sink','Scrub the sink','w',5,'T'],['kitchen-oven','Clean the oven','m',30,'B']]],
+  ['Kitchen', [['kitchen-load','Load & run the dishwasher','d',10,'B'],['kitchen-unload','Unload the dishwasher','d',10,'T'],['kitchen-counters','Wipe counters & stovetop','d',5,'T'],['kitchen-sweep','Sweep the floor','d',5,'B'],['kitchen-trash-daily','Take out kitchen trash & break down boxes','d',5,'B'],['kitchen-trash','Take trash & recycling bins to the curb','w',10,'B','Mon, Tue'],['kitchen-mop','Mop the floor','w',15,'B'],['kitchen-microwave','Clean the microwave','w',10,'T'],['kitchen-fridge','Clear out old food from the fridge','w',15,'T'],['kitchen-fronts','Wipe appliance fronts & cabinet handles','w',5,'V'],['kitchen-sink','Scrub the sink','w',5,'T'],['kitchen-oven','Clean the oven','m',30,'B']]],
   ['Dining Room', [['dining-set','Set the table for dinner','d',5,'V'],['dining-clear','Clear & wipe the table after dinner','d',5,'V'],['dining-vacuum','Vacuum under the table','w',10,'B'],['dining-chairs','Wipe down chairs','m',10,'V']]],
   ['Laundry Room', [['laundry-load','Wash & dry a load','d',5,'T'],['laundry-fold','Fold & put away a load','d',10,'T'],['laundry-lint','Clean lint trap & wipe machines','w',5,'B'],['laundry-washer','Run a washer cleaning cycle','m',15,'B']]],
   ["Parents' Bedroom", [['pbed-make','Make the bed','d',5,'T'],['pbed-sheets','Change the sheets','w',15,'B'],['pbed-vacuum','Vacuum','w',10,'B'],['pbed-dust','Dust nightstands & dresser','w',10,'T']]],
@@ -276,7 +277,7 @@ const STARTER = [
   ["Kids' Bathroom", [['kbath-towels','Hang up towel & put away bath toys','d',5,'V'],['kbath-sink','Wipe counter, sink & mirror','w',10,'V'],['kbath-toilet','Clean the toilet','w',10,'B'],['kbath-tub','Scrub the tub','w',20,'T'],['kbath-floor','Mop the floor','w',10,'B']]],
   ['Upstairs Hallway', [['up-clear','Clear clutter from the hallway','d',5,'B'],['up-vacuum','Vacuum','w',10,'T'],['up-switches','Dust & wipe light switches','m',10,'V']]],
 ];
-const STARTER_CHORES = STARTER.flatMap(([room, list]) => list.map(([id, name, freq, pts, o]) => ({ id, room, name, freq, pts, owner: O[o] })));
+const STARTER_CHORES = STARTER.flatMap(([room, list]) => list.map(([id, name, freq, pts, o, days]) => ({ id, room, name, freq, pts, owner: O[o], days: days || '' })));
 
 // ---------- Dates & periods ----------
 const pad = n => String(n).padStart(2, '0');
@@ -448,7 +449,7 @@ function dailyTargets(m, now) {
   const scored = CHORES.map(c => ({ c, n: skipsBefore(c, m, now), h: hash(today + '|' + c.id) })).sort((a, b) => a.h - b.h);
   const skipped = scored.filter(x => x.n > 0 && !doneEarlier(x.c));
   const notYet = scored.filter(x => x.n === 0 && x.c.freq !== 'd' && !doneEarlier(x.c));
-  const pool = skipped.concat(notYet);
+  const pool = skipped.concat(notYet).filter(x => availableOn(x.c, now));
   // One for each person first, from their own chores; anyone with nothing eligible gives their slot to the next best pick.
   const picks = [];
   for (const p of PEOPLE) { const x = pool.find(y => y.c.owner === p.id); if (x) picks.push(x); }
@@ -457,6 +458,23 @@ function dailyTargets(m, now) {
 }
 const bonusFor = (c, share) => share ? Math.max(1, Math.round(c.pts * share)) : 0;
 const UNIT = { d: 'day', w: 'week', m: 'month' };
+// Optional "Days" column: a chore that can only be done on certain days, like trash night.
+const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DOW_NAME = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function choreDays(c) {
+  if (!c.days) return null;
+  const set = new Set();
+  for (const part of String(c.days).toLowerCase().split(/[^a-z]+/)) { const i = DOW.indexOf(part.slice(0, 3)); if (i >= 0) set.add(i); }
+  return set.size ? set : null;
+}
+const availableOn = (c, d) => { const s = choreDays(c); return !s || s.has(d.getDay()); };
+function daysText(c, now) {
+  const s = choreDays(c);
+  if (!s) return '';
+  const list = [...s].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => DOW_NAME[i]).join(' or ');
+  if (!s.has(now.getDay())) return list + ' only';
+  return list + (s.has((now.getDay() + 1) % 7) ? ' · due today' : ' · last chance today');
+}
 const skipText = (c, n) => `Skipped ${n > 1 ? n + ' ' + UNIT[c.freq] + 's' : UNIT[c.freq] === 'day' ? 'yesterday' : 'last ' + UNIT[c.freq]}`;
 
 // ---------- Today ----------
@@ -465,6 +483,7 @@ function choreRow(c, m, now, targets) {
   const owner = person(c.owner);
   const share = targets.get(c.id) || 0, b = bonusFor(c, share);
   let sub = `<span>${esc(c.room)}</span><span aria-hidden="true">·</span><span class="owner-tag"><span class="dot" style="${pVars(owner)}"></span>${esc(owner.id)}</span>`;
+  if (c.days && !done) sub += `<span aria-hidden="true">·</span><span class="when">${esc(daysText(c, now))}</span>`;
   if (done) sub += `<span aria-hidden="true">·</span><span class="done-by">Done by ${esc(person(done.person).id)}</span><button class="undo" data-undo="${esc(c.id)}">Undo</button>`;
   const n = done ? 0 : skips(c, m, now);
   if (n) sub += `<span aria-hidden="true">·</span><span class="skipped">${skipText(c, n)}</span>`;
@@ -499,7 +518,7 @@ function renderToday(m, now) {
   const targetsDone = targetList.filter(c => m.has(docId(c, now))).length;
   const targetHtml = targetList.length ? `<div class="group"><div class="group-head"><h2>Today's bonus chores</h2><span>${targetsDone}/${targetList.length} done · new picks tomorrow</span></div>
       <div class="list">${targetList.map(c => choreRow(c, m, now, targets)).join('')}</div></div>` : '';
-  const pool = CHORES.filter(c => !targets.has(c.id) && (ownerFilter === 'all' || c.owner === ownerFilter) && (roomFilter === 'all' || c.room === roomFilter));
+  const pool = CHORES.filter(c => !targets.has(c.id) && (availableOn(c, now) || m.has(docId(c, now))) && (ownerFilter === 'all' || c.owner === ownerFilter) && (roomFilter === 'all' || c.room === roomFilter));
   const daysLeftWeek = 7 - Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - wk) / 864e5);
   const daysLeftMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1;
   const plural = n => n === 1 ? '' : 's';
@@ -609,7 +628,7 @@ function renderPlan() {
     const list = CHORES.filter(c => c.room === r);
     return `<div class="room"><h3>${esc(r)} <span>${list.length} chores</span></h3><ul>${list.map(c => {
       const p = person(c.owner);
-      return `<li><span class="freq">${FREQ[c.freq]}</span><span>${esc(c.name)}</span><span class="owner-tag" title="${esc(p.id)}"><span class="dot" style="${pVars(p)}"></span>${esc(p.id[0])}</span>${ptsHtml(c.pts)}</li>`;
+      return `<li><span class="freq">${FREQ[c.freq]}</span><span>${esc(c.name)}${choreDays(c) ? ` <span class="when">(${esc(daysText(c, new Date(2000, 0, 2)))})</span>` : ''}</span><span class="owner-tag" title="${esc(p.id)}"><span class="dot" style="${pVars(p)}"></span>${esc(p.id[0])}</span>${ptsHtml(c.pts)}</li>`;
     }).join('')}</ul></div>`;
   }).join('');
   document.getElementById('view-plan').innerHTML = `

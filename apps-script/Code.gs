@@ -5,13 +5,14 @@
  * then Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone).
  *
  * The sheet gets two tabs:
- *   Chores       Room | Chore | Frequency | Points | Owner | ID   (edit this tab to change the plan)
+ *   Chores       Room | Chore | Frequency | Points | Owner | ID | Days   (edit this tab to change the plan;
+ *                Days is optional, e.g. "Mon, Tue" for a chore that can only be done on those days)
  *   Completions  ID | Chore ID | Person | Points | Period | Date | Time | Bonus
  */
 
 const CHORES_TAB = 'Chores';
 const DONE_TAB = 'Completions';
-const CHORE_HEADERS = ['Room', 'Chore', 'Frequency', 'Points', 'Owner', 'ID'];
+const CHORE_HEADERS = ['Room', 'Chore', 'Frequency', 'Points', 'Owner', 'ID', 'Days'];
 const DONE_HEADERS = ['ID', 'Chore ID', 'Person', 'Points', 'Period', 'Date', 'Time', 'Bonus'];
 const PEOPLE = ['Tracy', 'Billy', 'Vivian'];
 // Leave blank when the script is opened from the sheet (Extensions > Apps Script).
@@ -95,6 +96,7 @@ function readChores_() {
       freq: f === 'd' ? 'd' : f === 'm' ? 'm' : 'w',
       pts: Number(r[3]) || 5,
       owner: String(r[4] || '').trim(),
+      days: String(r[6] || '').trim(),
     });
   });
   if (wroteIds) SpreadsheetApp.flush();
@@ -143,9 +145,9 @@ function seed_(chores) {
   const sh = tab_(CHORES_TAB, CHORE_HEADERS);
   if (sh.getLastRow() > 1 || !chores.length) return;
   const label = { d: 'Daily', w: 'Weekly', m: 'Monthly' };
-  const values = chores.map(function (c) { return [c.room, c.name, label[c.freq] || 'Weekly', c.pts, c.owner, c.id]; });
-  sh.getRange(2, 1, values.length, 6).setValues(values);
-  sh.autoResizeColumns(1, 6);
+  const values = chores.map(function (c) { return [c.room, c.name, label[c.freq] || 'Weekly', c.pts, c.owner, c.id, c.days || '']; });
+  sh.getRange(2, 1, values.length, 7).setValues(values);
+  sh.autoResizeColumns(1, 7);
   const rule = SpreadsheetApp.newDataValidation().requireValueInList(['Daily', 'Weekly', 'Monthly'], true).build();
   sh.getRange(2, 3, 500, 1).setDataValidation(rule);
   const who = SpreadsheetApp.newDataValidation().requireValueInList(PEOPLE, true).build();

@@ -38,11 +38,13 @@ A chore board for Tracy, Billy and Vivian. It runs in Safari on iPhone and on Ap
 
 Edit the **Chores** tab in the Google Sheet. Each row is one chore:
 
-| Room | Chore | Frequency | Points | Owner | ID |
-|---|---|---|---|---|---|
-| Kitchen | Unload the dishwasher | Daily | 10 | Tracy | kitchen-unload |
+| Room | Chore | Frequency | Points | Owner | ID | Days |
+|---|---|---|---|---|---|---|
+| Kitchen | Unload the dishwasher | Daily | 10 | Tracy | kitchen-unload | |
+| Kitchen | Take trash & recycling bins to the curb | Weekly | 10 | Billy | kitchen-trash | Mon, Tue |
 
 - **Frequency** is Daily, Weekly or Monthly. **Owner** is Tracy, Billy or Vivian.
+- **Days** is optional. Fill it in (for example `Mon, Tue`) for a chore that can only be done on certain days. It only shows on the board on those days.
 - Leave **ID** blank on a new row. The script fills it in.
 - Don't change an existing ID. Past check-offs are linked to it.
 - Devices pick up changes within about 20 seconds.
