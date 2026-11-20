@@ -14,6 +14,13 @@ const DONE_TAB = 'Completions';
 const CHORE_HEADERS = ['Room', 'Chore', 'Frequency', 'Points', 'Owner', 'ID'];
 const DONE_HEADERS = ['ID', 'Chore ID', 'Person', 'Points', 'Period', 'Date', 'Time'];
 const PEOPLE = ['Tracy', 'Billy', 'Vivian'];
+// Leave blank when the script is opened from the sheet (Extensions > Apps Script).
+// For a standalone script, paste the sheet's ID from its URL: docs.google.com/spreadsheets/d/<ID>/edit
+const SHEET_ID = '';
+
+function book_() {
+  return SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+}
 
 function doGet(e) {
   return json_(readState_((e && e.parameter && e.parameter.since) || ''));
@@ -38,7 +45,7 @@ function json_(obj) {
 }
 
 function tab_(name, headers) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = book_();
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
