@@ -1,6 +1,6 @@
 # Family Chore Board
 
-A chore board for Tracy, Billy and Vivian. It runs in Safari on iPhone and on Apple HomeView, and syncs through a Google Sheet.
+A chore board for Tracy, Billy and Vivian. On screen it's called **Family Jobs**, and chores are called jobs. It runs in Safari on iPhone and on Apple HomeView, and syncs through a Google Sheet.
 
 - **Website:** https://y3ag3r.github.io/chore-board/
 - **Website code:** `docs/` (served by GitHub Pages)
@@ -56,6 +56,8 @@ Every check-off is a row on the **Completions** tab, so the sheet is also a full
 - The **History** tab shows each person's daily-chore rate for the last 7 days, the chores being skipped (with when each was last done), and a day-by-day log of the last 14 days.
 - Each day the board picks one **bonus chore** for each person, from their own chores that were skipped or haven't been done yet this week or month. If someone has nothing eligible, their slot goes to another chore. A bonus chore is worth 25% more, or 50% more if it was skipped two or more times in a row. The picks rotate daily, and every device shows the same ones.
 - Bonuses are recorded in the **Bonus** column of the Completions tab.
+- If a weekly or monthly job got done on an earlier day without being checked off, tap **Done earlier?** under it, pick the day and who did it. It counts for that day's week or month (no bonus), so the skip count and "last done" date stay right.
+- A Days column that limits a daily job to some days (like homework on weekdays) also leaves those days out of streaks and the 7-day rate.
 - A new chore added to the sheet counts as skipped from the board's first day until someone does it once.
 
 ## Privacy

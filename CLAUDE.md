@@ -31,6 +31,8 @@ User-facing setup and usage docs are in `README.md`. Private links (sheet ID, sc
 - **Bonus chores:** `dailyTargets()` picks one chore per person each day from their own chores. A chore is eligible if it was skipped (`skipsBefore` > 0), or if it's a weekly or monthly chore not done yet this period, and it must be available today (Days column). If someone has nothing eligible, their slot goes to the next pick, for 3 in total. The order rotates by FNV hash of `date|choreId`. The bonus is 25%, or 50% if skipped 2+ periods in a row. Picks are computed from completions *before* the current period, so they don't change during the day. The bonus is stored on the completion record.
 - **Skips:** counted per period from the last completion (the server's `last` plus the local window), or from the board's first day if the chore was never done.
 - **Days column:** `availableOn()` hides a chore on other days unless it's already done. `daysText()` shows "Mon or Tue · due today" or "last chance today". The trash bins chore is `Mon, Tue`.
+- **Wording:** the UI says "Family Jobs" and "jobs" (user asked for something more kid-friendly than chores). Code, sheet tab and IDs still say chores.
+- **Done earlier?:** weekly/monthly rows have a link that opens the picker with a date (back 35 days, or 92 for monthly). It posts a normal `done` record dated that day, with no bonus.
 - **History tab:** 7-day rates for each person's own daily chores, the "Being skipped" list, and a 14-day daily log.
 
 ## Decisions the user made (keep these)

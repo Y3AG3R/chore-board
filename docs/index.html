@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Chore Board</title>
-<meta name="description" content="Family chore board for Tracy, Billy and Vivian">
+<title>Family Jobs</title>
+<meta name="description" content="Family job board for Tracy, Billy and Vivian">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Chores">
+<meta name="apple-mobile-web-app-title" content="Jobs">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1a202b" media="(prefers-color-scheme: dark)">
@@ -161,6 +161,9 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
 .pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .pick button { border: 2px solid var(--pc); background: var(--pbg); border-radius: 16px; padding: 14px 6px; display: grid; justify-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
 .pick .avatar { width: 52px; height: 52px; font-size: 1.5rem; }
+.sheet .date-row { display: flex; justify-content: center; align-items: center; gap: 10px; font-weight: 600; }
+.sheet .date-row input { font: inherit; font-size: 1rem; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--ink); }
+.sheet .note { color: var(--warn); font-size: 0.9rem; }
 .sheet .cancel { background: none; border: 0; color: var(--muted); padding: 8px; min-height: 44px; }
 
 /* Setup */
@@ -211,7 +214,7 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
   <div class="wrap">
     <div class="head-row">
       <div class="brand">
-        <h1>Chore Board</h1>
+        <h1>Family Jobs</h1>
         <span class="sync" id="sync" aria-live="polite"></span>
       </div>
       <div class="who" id="who" role="group" aria-label="This screen is for">
@@ -241,6 +244,8 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="picker-title">
     <h2 id="picker-title">Who did it?</h2>
     <p id="picker-chore"></p>
+    <label class="date-row" id="picker-date-row" hidden>Which day? <input type="date" id="picker-date"></label>
+    <p class="note" id="picker-note" hidden></p>
     <div class="pick" id="picker-people"></div>
     <button class="cancel" id="picker-cancel">Cancel</button>
   </div>
@@ -395,7 +400,7 @@ function renderWho() {
     const b = document.createElement('button');
     b.className = 'person-btn'; b.id = 'me-' + o.id; b.style.cssText = pVars(o.p);
     b.setAttribute('aria-pressed', String(me === o.id));
-    b.title = o.id === 'shared' ? 'Shared screen: ask who did each chore' : `This is ${o.label}'s device`;
+    b.title = o.id === 'shared' ? 'Shared screen: ask who did each job' : `This is ${o.label}'s device`;
     b.innerHTML = `${avatar(o.p)}<span class="pname">${esc(o.label)}</span>`;
     b.onclick = () => { me = o.id; store.set('me', me); ownerFilter = me === 'shared' ? 'all' : me; store.set('filter', ownerFilter); renderWho(); render(); };
     box.appendChild(b);
@@ -406,7 +411,7 @@ function pointsBetween(m, who, from, to) { let t = 0; for (const c of m.values()
 function streak(m, who, now) {
   const daily = CHORES.filter(c => c.owner === who && c.freq === 'd');
   if (!daily.length) return 0;
-  const allDone = d => daily.every(c => m.has(docId(c, d)));
+  const allDone = d => daily.filter(c => availableOn(c, d)).every(c => m.has(docId(c, d)));
   let d = allDone(now) ? now : addDays(now, -1), n = 0;
   while (n < 31 && allDone(d)) { n++; d = addDays(d, -1); }
   return n;
@@ -471,7 +476,8 @@ const availableOn = (c, d) => { const s = choreDays(c); return !s || s.has(d.get
 function daysText(c, now) {
   const s = choreDays(c);
   if (!s) return '';
-  const list = [...s].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => DOW_NAME[i]).join(' or ');
+  const weekdays = s.size === 5 && [1, 2, 3, 4, 5].every(i => s.has(i));
+  const list = weekdays ? 'Weekdays' : [...s].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => DOW_NAME[i]).join(' or ');
   if (!s.has(now.getDay())) return list + ' only';
   return list + (s.has((now.getDay() + 1) % 7) ? ' · due today' : ' · last chance today');
 }
@@ -483,15 +489,16 @@ function choreRow(c, m, now, targets) {
   const owner = person(c.owner);
   const share = targets.get(c.id) || 0, b = bonusFor(c, share);
   let sub = `<span>${esc(c.room)}</span><span aria-hidden="true">·</span><span class="owner-tag"><span class="dot" style="${pVars(owner)}"></span>${esc(owner.id)}</span>`;
-  if (c.days && !done) sub += `<span aria-hidden="true">·</span><span class="when">${esc(daysText(c, now))}</span>`;
+  if (c.days && !done && c.freq !== 'd') sub += `<span aria-hidden="true">·</span><span class="when">${esc(daysText(c, now))}</span>`;
   if (done) sub += `<span aria-hidden="true">·</span><span class="done-by">Done by ${esc(person(done.person).id)}</span><button class="undo" data-undo="${esc(c.id)}">Undo</button>`;
   const n = done ? 0 : skips(c, m, now);
   if (n) sub += `<span aria-hidden="true">·</span><span class="skipped">${skipText(c, n)}</span>`;
+  if (!done && c.freq !== 'd') sub += `<button class="undo" data-earlier="${esc(c.id)}">Done earlier?</button>`;
   else if (!done && !share && me !== 'shared' && c.owner !== me) sub += `<span aria-hidden="true">·</span><span class="bounty">Do it and the points are yours</span>`;
   const pts = done ? done.pts : c.pts + b;
   const shown = done ? done.bonus : b;
   const ptsBlock = shown ? `<span class="pts-stack">${ptsHtml(pts)}<span class="bonus">+${shown} bonus</span></span>` : ptsHtml(pts);
-  const badge = share && !done ? `<span class="target-badge">Bonus chore +${Math.round(share * 100)}%</span>` : '';
+  const badge = share && !done ? `<span class="target-badge">Bonus job +${Math.round(share * 100)}%</span>` : '';
   return `<div class="chore${done ? ' done' : ''}${share ? ' target' : ''}">
     <button class="check" data-check="${esc(c.id)}" ${done ? 'disabled' : ''} aria-label="${done ? 'Done' : 'Mark done'}: ${esc(c.name)}">
       <svg viewBox="0 0 16 16" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg>
@@ -504,19 +511,19 @@ function renderToday(m, now) {
   const wk = weekStart(now), weekFrom = dayKey(wk), today = dayKey(now);
   const targets = dailyTargets(m, now);
   const cards = PEOPLE.map(p => {
-    const list = CHORES.filter(c => c.owner === p.id);
+    const list = CHORES.filter(c => c.owner === p.id && (availableOn(c, now) || m.has(docId(c, now))));
     const doneN = list.filter(c => m.has(docId(c, now))).length;
     const pct = list.length ? Math.round(doneN / list.length * 100) : 0;
     const s = streak(m, p.id, now);
     return `<div class="sum-card" style="${pVars(p)}">
       <div class="sum-top"><span class="sum-name">${avatar(p)}${esc(p.id)}</span>${ptsHtml(pointsBetween(m, p.id, weekFrom, today))}</div>
-      <div class="bar" role="img" aria-label="${pct}% of ${esc(p.id)}'s chores done"><span style="width:${pct}%"></span></div>
+      <div class="bar" role="img" aria-label="${pct}% of ${esc(p.id)}'s jobs done"><span style="width:${pct}%"></span></div>
       <div class="sum-meta">${doneN}/${list.length} done${s ? ` · ${s}-day streak` : ''}</div>
     </div>`;
   }).join('');
   const targetList = [...targets.keys()].map(id => CBY[id]).filter(Boolean);
   const targetsDone = targetList.filter(c => m.has(docId(c, now))).length;
-  const targetHtml = targetList.length ? `<div class="group"><div class="group-head"><h2>Today's bonus chores</h2><span>${targetsDone}/${targetList.length} done · new picks tomorrow</span></div>
+  const targetHtml = targetList.length ? `<div class="group"><div class="group-head"><h2>Today's bonus jobs</h2><span>${targetsDone}/${targetList.length} done · new picks tomorrow</span></div>
       <div class="list">${targetList.map(c => choreRow(c, m, now, targets)).join('')}</div></div>` : '';
   const pool = CHORES.filter(c => !targets.has(c.id) && (availableOn(c, now) || m.has(docId(c, now))) && (ownerFilter === 'all' || c.owner === ownerFilter) && (roomFilter === 'all' || c.room === roomFilter));
   const daysLeftWeek = 7 - Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - wk) / 864e5);
@@ -538,7 +545,7 @@ function renderToday(m, now) {
     ${targetHtml}
     <div class="filters">${chip('all', 'Everyone')}${PEOPLE.map(p => chip(p.id, p.id, p)).join('')}
       <select id="room-filter" aria-label="Room">${roomOpts}</select></div>
-    ${groups || '<div class="list"><div class="empty">No chores match these filters.</div></div>'}`;
+    ${groups || '<div class="list"><div class="empty">No jobs match these filters.</div></div>'}`;
 }
 
 // ---------- Scores ----------
@@ -554,13 +561,13 @@ function renderScores(m, now) {
   const feed = recent.length ? recent.map(c => {
     const p = person(c.person), ch = CBY[c.chore], t = new Date(Number(c.ts));
     const when = dayKey(t) === today ? t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : t.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-    return `<div class="feed-row">${avatar(p)}<span class="txt"><strong>${esc(p.id)}</strong> ${esc(ch ? ch.name.charAt(0).toLowerCase() + ch.name.slice(1) : 'did a chore')}${ch ? ` <span style="color:var(--muted)">· ${esc(ch.room)}</span>` : ''}</span>${ptsHtml(c.pts)}${c.bonus ? `<span class="bonus">+${c.bonus}</span>` : ''}<time>${esc(when)}</time></div>`;
-  }).join('') : '<div class="empty">No chores checked off yet. The first one gets the board started.</div>';
+    return `<div class="feed-row">${avatar(p)}<span class="txt"><strong>${esc(p.id)}</strong> ${esc(ch ? ch.name.charAt(0).toLowerCase() + ch.name.slice(1) : 'did a job')}${ch ? ` <span style="color:var(--muted)">· ${esc(ch.room)}</span>` : ''}</span>${ptsHtml(c.pts)}${c.bonus ? `<span class="bonus">+${c.bonus}</span>` : ''}<time>${esc(when)}</time></div>`;
+  }).join('') : '<div class="empty">No jobs checked off yet. The first one gets the board started.</div>';
   document.getElementById('view-scores').innerHTML = `
     <div class="group"><div class="group-head"><h2>This week's leaderboard</h2><span>Week of ${weekStart(now).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span></div><div class="board">${board}</div></div>
     <div class="stats">${stat('Today', 'today', v => `★ ${v}`)}${stat(now.toLocaleDateString([], { month: 'long' }), 'month', v => `★ ${v}`)}${stat('Daily streak', 'streak', v => `${v} day${v === 1 ? '' : 's'}`)}</div>
     <div class="group"><div class="group-head"><h2>Recent activity</h2></div><div class="feed">${feed}</div></div>
-    <p class="sum-meta">A streak counts the days in a row that all of a person's own daily chores got done.</p>`;
+    <p class="sum-meta">A streak counts the days in a row that all of a person's own daily jobs got done.</p>`;
 }
 
 // ---------- History ----------
@@ -571,11 +578,11 @@ function renderHistory(m, now) {
   const days7 = [...Array(7)].map((_, i) => addDays(now, i - 6)).filter(d => dayKey(d) >= start);
   const rates = PEOPLE.map(p => {
     const own = CHORES.filter(c => c.owner === p.id && c.freq === 'd');
-    const exp = own.length * days7.length;
-    const got = days7.reduce((t, d) => t + own.filter(c => m.has(docId(c, d))).length, 0);
+    const exp = days7.reduce((t, d) => t + own.filter(c => availableOn(c, d)).length, 0);
+    const got = days7.reduce((t, d) => t + own.filter(c => availableOn(c, d) && m.has(docId(c, d))).length, 0);
     const pct = exp ? Math.round(got / exp * 100) : 0;
     return `<div class="sum-card rate" style="${pVars(p)}"><div class="sum-top"><span class="sum-name">${avatar(p)}${esc(p.id)}</span><span class="pts">${pct}%</span></div>
-      <div class="bar"><span style="width:${pct}%"></span></div><div class="sum-meta">${got} of ${exp} daily chores</div></div>`;
+      <div class="bar"><span style="width:${pct}%"></span></div><div class="sum-meta">${got} of ${exp} daily jobs</div></div>`;
   }).join('');
 
   // Chores being skipped right now
@@ -587,10 +594,10 @@ function renderHistory(m, now) {
   const skipped = CHORES.map(c => ({ c, n: skips(c, m, now) })).filter(x => x.n).sort((a, b) => b.n - a.n || b.c.pts - a.c.pts);
   const skippedHtml = skipped.length ? `<div class="list">${skipped.slice(0, 15).map(({ c, n }) => {
       const o = person(c.owner), share = targets.get(c.id);
-      return `<div class="chore${share ? ' target' : ''}"><div class="chore-main">${share ? `<span class="target-badge">Today's bonus chore +${Math.round(share * 100)}%</span>` : ''}<span class="chore-name">${esc(c.name)}</span>
+      return `<div class="chore${share ? ' target' : ''}"><div class="chore-main">${share ? `<span class="target-badge">Today's bonus job +${Math.round(share * 100)}%</span>` : ''}<span class="chore-name">${esc(c.name)}</span>
         <span class="chore-sub"><span>${esc(c.room)}</span><span aria-hidden="true">·</span><span class="owner-tag"><span class="dot" style="${pVars(o)}"></span>${esc(o.id)}</span><span aria-hidden="true">·</span><span class="skipped">${skipText(c, n)}</span><span aria-hidden="true">·</span><span>${esc(lastText(c))}</span></span></div>
         ${ptsHtml(c.pts + bonusFor(c, share))}</div>`;
-    }).join('')}</div>${skipped.length > 15 ? `<p class="sum-meta">${skipped.length - 15} more skipped chores aren't shown.</p>` : ''}`
+    }).join('')}</div>${skipped.length > 15 ? `<p class="sum-meta">${skipped.length - 15} more skipped jobs aren't shown.</p>` : ''}`
     : '<div class="list"><div class="empty">Nothing is being skipped right now.</div></div>';
 
   // Day-by-day log of what got done
@@ -603,15 +610,15 @@ function renderHistory(m, now) {
   const log = byDay.size ? [...byDay.entries()].map(([k, rs]) => {
     const total = rs.reduce((t, r) => t + (Number(r.pts) || 0), 0);
     const title = k === today ? 'Today' : k === dayKey(addDays(now, -1)) ? 'Yesterday' : parseDay(k).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-    return `<div class="log-day"><h3>${esc(title)} · ${rs.length} chore${rs.length === 1 ? '' : 's'} · ★ ${total}</h3><div class="feed">${rs.map(r => {
+    return `<div class="log-day"><h3>${esc(title)} · ${rs.length} job${rs.length === 1 ? '' : 's'} · ★ ${total}</h3><div class="feed">${rs.map(r => {
       const p = person(r.person), ch = CBY[r.chore], t = new Date(Number(r.ts));
-      return `<div class="feed-row">${avatar(p)}<span class="txt"><strong>${esc(p.id)}</strong> ${esc(ch ? ch.name.charAt(0).toLowerCase() + ch.name.slice(1) : 'a chore that was removed')}${ch ? ` <span style="color:var(--muted)">· ${esc(ch.room)}</span>` : ''}</span>${ptsHtml(r.pts)}${r.bonus ? `<span class="bonus">+${r.bonus}</span>` : ''}<time>${esc(t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</time></div>`;
+      return `<div class="feed-row">${avatar(p)}<span class="txt"><strong>${esc(p.id)}</strong> ${esc(ch ? ch.name.charAt(0).toLowerCase() + ch.name.slice(1) : 'a job that was removed')}${ch ? ` <span style="color:var(--muted)">· ${esc(ch.room)}</span>` : ''}</span>${ptsHtml(r.pts)}${r.bonus ? `<span class="bonus">+${r.bonus}</span>` : ''}<time>${esc(t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</time></div>`;
     }).join('')}</div></div>`;
   }).join('') : '<div class="feed"><div class="empty">Nothing checked off in the last 14 days.</div></div>';
 
   document.getElementById('view-history').innerHTML = `
-    <div class="group"><div class="group-head"><h2>Last 7 days</h2><span>Each person's own daily chores</span></div><div class="summary">${rates}</div></div>
-    <div class="group"><div class="group-head"><h2>Being skipped</h2><span>${skipped.length} chore${skipped.length === 1 ? '' : 's'}</span></div>${skippedHtml}</div>
+    <div class="group"><div class="group-head"><h2>Last 7 days</h2><span>Each person's own daily jobs</span></div><div class="summary">${rates}</div></div>
+    <div class="group"><div class="group-head"><h2>Being skipped</h2><span>${skipped.length} job${skipped.length === 1 ? '' : 's'}</span></div>${skippedHtml}</div>
     <div class="group"><div class="group-head"><h2>Daily log</h2><span>Everything checked off in the last 14 days</span></div>${log}</div>`;
 }
 
@@ -622,20 +629,20 @@ function renderPlan() {
     const wk = Math.round(mine.reduce((t, c) => t + (c.freq === 'd' ? c.pts * 7 : c.freq === 'w' ? c.pts : c.pts / 4.3), 0));
     const n = f => mine.filter(c => c.freq === f).length;
     return `<div class="sum-card" style="${pVars(p)}"><div class="sum-top"><span class="sum-name">${avatar(p)}${esc(p.id)}</span>${ptsHtml(wk)}</div>
-      <div class="sum-meta">${mine.length} chores: ${n('d')} daily, ${n('w')} weekly, ${n('m')} monthly · about ${wk} points a week</div></div>`;
+      <div class="sum-meta">${mine.length} jobs: ${n('d')} daily, ${n('w')} weekly, ${n('m')} monthly · about ${wk} points a week</div></div>`;
   }).join('');
   const rooms = ROOMS.map(r => {
     const list = CHORES.filter(c => c.room === r);
-    return `<div class="room"><h3>${esc(r)} <span>${list.length} chores</span></h3><ul>${list.map(c => {
+    return `<div class="room"><h3>${esc(r)} <span>${list.length} jobs</span></h3><ul>${list.map(c => {
       const p = person(c.owner);
       return `<li><span class="freq">${FREQ[c.freq]}</span><span>${esc(c.name)}${choreDays(c) ? ` <span class="when">(${esc(daysText(c, new Date(2000, 0, 2)))})</span>` : ''}</span><span class="owner-tag" title="${esc(p.id)}"><span class="dot" style="${pVars(p)}"></span>${esc(p.id[0])}</span>${ptsHtml(c.pts)}</li>`;
     }).join('')}</ul></div>`;
   }).join('');
   document.getElementById('view-plan').innerHTML = `
     <div class="plan-intro"><h2>How the board works</h2>
-      <p>Every chore has an owner and a point value: 5 for quick jobs, 10 to 15 for medium ones, 20 to 30 for big cleans. Daily chores reset at midnight, weekly ones on Monday, monthly ones on the 1st.</p>
-      <p>Anyone can do anyone's chore. Whoever checks it off gets the points. To change chores, owners or points, edit the Chores tab in the Google Sheet.</p>
-      <p>Each day the board picks one bonus chore for each person from their own chores that were skipped or haven't been done yet this week or month. A bonus chore is worth 25% more, or 50% more if it was skipped two or more times in a row. The picks change every day.</p></div>
+      <p>Every job has an owner and a point value: 5 for quick jobs, 10 to 15 for medium ones, 20 to 30 for big cleans. Daily jobs reset at midnight, weekly ones on Monday, monthly ones on the 1st.</p>
+      <p>Anyone can do anyone's job. Whoever checks it off gets the points. If a weekly or monthly job got done on an earlier day, tap <strong>Done earlier?</strong> under it to record the day. To change jobs, owners or points, edit the Chores tab in the Google Sheet.</p>
+      <p>Each day the board picks one bonus job for each person from their own jobs that were skipped or haven't been done yet this week or month. A bonus job is worth 25% more, or 50% more if it was skipped two or more times in a row. The picks change every day.</p></div>
     <div class="balance">${bal}</div>
     <div class="legend">${PEOPLE.map(p => `<span class="owner-tag"><span class="dot" style="${pVars(p)}"></span>${esc(p.id)}</span>`).join('')}<span>★ points</span></div>
     <div class="rooms">${rooms}</div>`;
@@ -657,7 +664,7 @@ function renderSetup() {
       <ol>
         <li>Open this page in Safari.</li>
         <li>Tap the Share button, then <strong>Add to Home Screen</strong>.</li>
-        <li>On each phone, tap your name at the top so check-offs go to you. On a shared screen like HomeView, choose <strong>Everyone</strong> and the board will ask who did each chore.</li>
+        <li>On each phone, tap your name at the top so check-offs go to you. On a shared screen like HomeView, choose <strong>Everyone</strong> and the board will ask who did each job.</li>
       </ol>
     </div>`;
 }
@@ -689,25 +696,44 @@ function setView(v) { view = ['today', 'scores', 'history', 'plan', 'setup'].inc
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => setView(t.dataset.view));
 
 // ---------- Actions ----------
-let pickFor = null;
-function complete(choreId, who) {
+let pickFor = null, pickEarlier = false;
+// \`day\` (YYYY-MM-DD) records a job that was done on an earlier day. It counts for that day's week or month, with no bonus.
+function complete(choreId, who, day) {
   const c = CBY[choreId]; if (!c) return;
   const now = new Date();
-  const bonus = bonusFor(c, dailyTargets(completions(), now).get(c.id) || 0);
-  const record = { id: docId(c, now), chore: c.id, person: who, pts: c.pts + bonus, bonus, period: periodKey(c.freq, now), date: dayKey(now), ts: now.getTime() };
+  const when = day ? new Date(parseDay(day).setHours(12)) : now;
+  const bonus = day ? 0 : bonusFor(c, dailyTargets(completions(), now).get(c.id) || 0);
+  const record = { id: docId(c, when), chore: c.id, person: who, pts: c.pts + bonus, bonus, period: periodKey(c.freq, when), date: dayKey(when), ts: day ? Math.min(when.getTime(), now.getTime()) : now.getTime() };
   if (!api) { server.set(record.id, record); render(); return; }
   queue({ op: 'done', record });
 }
-function openPicker(choreId) {
-  pickFor = choreId;
-  document.getElementById('picker-chore').textContent = CBY[choreId].name;
+function openPicker(choreId, earlier) {
+  pickFor = choreId; pickEarlier = !!earlier;
+  const c = CBY[choreId], now = new Date();
+  document.getElementById('picker-title').textContent = earlier ? 'When was it done?' : 'Who did it?';
+  document.getElementById('picker-chore').textContent = c.name + (earlier ? ` · ${c.room}. Pick the day, then who did it.` : '');
+  document.getElementById('picker-date-row').hidden = !earlier;
+  document.getElementById('picker-note').hidden = true;
+  const input = document.getElementById('picker-date');
+  input.max = dayKey(now); input.min = dayKey(addDays(now, c.freq === 'm' ? -92 : -35));
+  input.value = dayKey(addDays(now, -1));
   document.getElementById('picker-people').innerHTML = PEOPLE.map(p => `<button style="${pVars(p)}" data-pick="${esc(p.id)}">${avatar(p)}${esc(p.id)}</button>`).join('');
   document.getElementById('picker').hidden = false;
 }
 function closePicker() { document.getElementById('picker').hidden = true; pickFor = null; }
 document.getElementById('picker').addEventListener('click', e => {
   const b = e.target.closest('[data-pick]');
-  if (b && pickFor) { const id = pickFor; closePicker(); complete(id, b.dataset.pick); return; }
+  if (b && pickFor) {
+    const id = pickFor;
+    if (pickEarlier) {
+      const day = document.getElementById('picker-date').value, note = document.getElementById('picker-note');
+      const c = CBY[id], err = !day || day > dayKey(new Date()) ? 'Pick a day that isn\'t in the future.'
+        : completions().has(docId(c, parseDay(day))) ? `It's already checked off for that ${UNIT[c.freq]}.` : '';
+      if (err) { note.textContent = err; note.hidden = false; return; }
+      closePicker(); complete(id, b.dataset.pick, day); return;
+    }
+    closePicker(); complete(id, b.dataset.pick); return;
+  }
   if (e.target.id === 'picker' || e.target.id === 'picker-cancel') closePicker();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && pickFor) closePicker(); });
@@ -717,6 +743,8 @@ document.getElementById('main').addEventListener('click', async e => {
   if (f) { ownerFilter = f.dataset.owner; store.set('filter', ownerFilter); render(); return; }
   const chk = e.target.closest('[data-check]');
   if (chk) { me === 'shared' ? openPicker(chk.dataset.check) : complete(chk.dataset.check, me); return; }
+  const early = e.target.closest('[data-earlier]');
+  if (early) { openPicker(early.dataset.earlier, true); return; }
   const u = e.target.closest('[data-undo]');
   if (u) {
     const c = CBY[u.dataset.undo]; if (!c) return;

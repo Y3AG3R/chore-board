@@ -1,7 +1,7 @@
 {
-  "name": "Family Chore Board",
-  "short_name": "Chores",
-  "description": "Family chore board for Tracy, Billy and Vivian",
+  "name": "Family Jobs",
+  "short_name": "Jobs",
+  "description": "Family job board for Tracy, Billy and Vivian",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
