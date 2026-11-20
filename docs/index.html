@@ -448,8 +448,12 @@ function dailyTargets(m, now) {
   const scored = CHORES.map(c => ({ c, n: skipsBefore(c, m, now), h: hash(today + '|' + c.id) })).sort((a, b) => a.h - b.h);
   const skipped = scored.filter(x => x.n > 0 && !doneEarlier(x.c));
   const notYet = scored.filter(x => x.n === 0 && x.c.freq !== 'd' && !doneEarlier(x.c));
-  const picks = skipped.concat(notYet).slice(0, TARGETS_PER_DAY);
-  return new Map(picks.map(x => [x.c.id, x.n >= 2 ? 0.5 : 0.25]));
+  const pool = skipped.concat(notYet);
+  // One for each person first, from their own chores; anyone with nothing eligible gives their slot to the next best pick.
+  const picks = [];
+  for (const p of PEOPLE) { const x = pool.find(y => y.c.owner === p.id); if (x) picks.push(x); }
+  for (const x of pool) { if (picks.length >= TARGETS_PER_DAY) break; if (!picks.includes(x)) picks.push(x); }
+  return new Map(picks.slice(0, Math.max(TARGETS_PER_DAY, PEOPLE.length)).map(x => [x.c.id, x.n >= 2 ? 0.5 : 0.25]));
 }
 const bonusFor = (c, share) => share ? Math.max(1, Math.round(c.pts * share)) : 0;
 const UNIT = { d: 'day', w: 'week', m: 'month' };
@@ -612,7 +616,7 @@ function renderPlan() {
     <div class="plan-intro"><h2>How the board works</h2>
       <p>Every chore has an owner and a point value: 5 for quick jobs, 10 to 15 for medium ones, 20 to 30 for big cleans. Daily chores reset at midnight, weekly ones on Monday, monthly ones on the 1st.</p>
       <p>Anyone can do anyone's chore. Whoever checks it off gets the points. To change chores, owners or points, edit the Chores tab in the Google Sheet.</p>
-      <p>Each day the board picks ${TARGETS_PER_DAY} bonus chores from the ones that were skipped or haven't been done yet this week or month. A bonus chore is worth 25% more, or 50% more if it was skipped two or more times in a row. The picks change every day.</p></div>
+      <p>Each day the board picks one bonus chore for each person from their own chores that were skipped or haven't been done yet this week or month. A bonus chore is worth 25% more, or 50% more if it was skipped two or more times in a row. The picks change every day.</p></div>
     <div class="balance">${bal}</div>
     <div class="legend">${PEOPLE.map(p => `<span class="owner-tag"><span class="dot" style="${pVars(p)}"></span>${esc(p.id)}</span>`).join('')}<span>★ points</span></div>
     <div class="rooms">${rooms}</div>`;
