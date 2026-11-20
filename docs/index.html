@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chore Board</title>
+<meta name="description" content="Family chore board for Tracy, Billy and Vivian">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Chores">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a202b" media="(prefers-color-scheme: dark)">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky header (title + "this screen is for" picker + tabs), tabbed views. Tuned for iPhone and HomeView's 7-inch square screen. */
+:root {
+  --bg: #f3f6fb; --surface: #ffffff; --surface-2: #e9eef6; --fg: #1d2433; --muted: #5d6879; --line: #d6deea;
+  --accent: #2f5bd3; --done: #1f8a5b; --star: #c98a00; --scrim: rgba(17, 21, 29, .45);
+  --tracy: #0f8b8d; --billy: #d9601a; --vivian: #8a4fd8;
+  --tracy-bg: #dff2f2; --billy-bg: #fbe8dc; --vivian-bg: #efe5fb; --all-bg: #e1e8f8;
+  --font-display: "Fredoka", "Avenir Next Rounded", ui-rounded, "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
+  --radius: 12px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11151d; --surface: #1a202b; --surface-2: #232b38; --fg: #e8edf5; --muted: #9aa6b8; --line: #2e3847;
+    --accent: #7c9cff; --done: #4fcf93; --star: #f2b93b; --scrim: rgba(0, 0, 0, .6);
+    --tracy: #3cc4c6; --billy: #ff8a4c; --vivian: #b78cff;
+    --tracy-bg: #12302f; --billy-bg: #3a2416; --vivian-bg: #2a1f3d; --all-bg: #1f2a44;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.45; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text-wrap: balance; }
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 960px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+
+header { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top); }
+.head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; padding-block: 10px 6px; }
+.brand { display: grid; gap: 0; }
+.brand h1 { font-size: 1.45rem; }
+.sync { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.sync.bad { color: var(--billy); }
+.who { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.who-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.person-btn { border: 2px solid transparent; background: var(--surface-2); border-radius: 999px; min-height: 40px; padding: 4px 12px 4px 4px; display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
+.person-btn[aria-pressed="true"] { border-color: var(--pc); background: var(--pbg); }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--pc); color: var(--surface); display: inline-grid; place-items: center; font-family: var(--font-display); font-size: 0.9rem; font-weight: 700; flex: none; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; }
+.tab { background: none; border: 0; padding: 10px 14px; min-height: 44px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+
+main { padding-top: 18px; padding-bottom: calc(40px + env(safe-area-inset-bottom)); display: grid; gap: 22px; }
+.banner { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; font-size: 0.9rem; }
+
+.summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.sum-card { background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--pc); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 6px; min-width: 0; }
+.sum-top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.sum-name { display: flex; align-items: center; gap: 8px; font-weight: 600; min-width: 0; }
+.pts { font-family: var(--font-display); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pts .star { color: var(--star); }
+.bar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--pc); border-radius: 999px; transition: width .3s; }
+.sum-meta { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+#room-filter { max-width: 170px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; min-height: 36px; padding: 6px 12px; font-size: 0.875rem; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+
+.group { display: grid; gap: 10px; }
+.group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; }
+.group-head h2 { font-size: 1.25rem; }
+.group-head span { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.chore { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); min-height: 60px; }
+.chore:first-child { border-top: 0; }
+.check { width: 36px; height: 36px; flex: none; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); display: grid; place-items: center; padding: 0; transition: transform .1s; }
+.check:active { transform: scale(.9); }
+.check svg { width: 18px; height: 18px; opacity: 0; }
+.chore.done .check { background: var(--done); border-color: var(--done); }
+.chore.done .check svg { opacity: 1; stroke: var(--surface); }
+.chore-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.chore-name { font-weight: 500; }
+.chore.done .chore-name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+.chore-sub { font-size: 0.8rem; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.owner-tag { display: inline-flex; align-items: center; gap: 4px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pc); display: inline-block; }
+.done-by { color: var(--done); font-weight: 500; }
+.bounty { color: var(--star); font-weight: 600; }
+.undo { background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: 0.8rem; padding: 4px 6px; }
+.empty { padding: 18px 14px; color: var(--muted); font-size: 0.9rem; }
+
+.board { display: grid; gap: 10px; }
+.rank { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
+.rank .place { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; color: var(--muted); width: 1.4em; text-align: center; }
+.rank .avatar { width: 38px; height: 38px; font-size: 1.1rem; }
+.rank-body { display: grid; gap: 6px; min-width: 0; }
+.rank-name { display: flex; gap: 10px; align-items: center; font-weight: 600; font-size: 1.05rem; }
+.rank .big { font-size: 1.5rem; text-align: right; }
+.rank .big small { display: block; font-family: var(--font-body); font-size: 0.72rem; font-weight: 500; color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; min-width: 0; }
+.stat h3 { font-size: 0.95rem; margin-bottom: 8px; }
+.stat table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+.stat td { padding: 3px 0; }
+.stat td:last-child { text-align: right; font-weight: 600; }
+.feed { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.feed-row { display: flex; gap: 10px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 0.9rem; }
+.feed-row:first-child { border-top: 0; }
+.feed-row .txt { flex: 1; min-width: 0; }
+.feed-row time { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+
+.plan-intro { display: grid; gap: 8px; max-width: 65ch; color: var(--muted); }
+.plan-intro h2 { color: var(--fg); }
+.plan-intro p { margin: 0; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.85rem; color: var(--muted); }
+.rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; align-items: start; }
+.room { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.room h3 { font-size: 1.05rem; padding: 12px 14px 8px; display: flex; justify-content: space-between; gap: 8px; }
+.room h3 span { font-family: var(--font-body); font-size: 0.8rem; font-weight: 500; color: var(--muted); }
+.room ul { list-style: none; margin: 0; padding: 0; }
+.room li { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; padding: 7px 14px; border-top: 1px solid var(--line); font-size: 0.875rem; }
+.freq { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 6px; background: var(--surface-2); color: var(--muted); width: 4.8em; text-align: center; }
+.balance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+
+/* "Who did it?" sheet for shared screens */
+.scrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.sheet { background: var(--surface); border-radius: 18px; padding: 20px; width: min(440px, 100%); display: grid; gap: 14px; text-align: center; }
+.sheet h2 { font-size: 1.35rem; }
+.sheet p { margin: 0; color: var(--muted); }
+.pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pick button { border: 2px solid var(--pc); background: var(--pbg); border-radius: 16px; padding: 14px 6px; display: grid; justify-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
+.pick .avatar { width: 52px; height: 52px; font-size: 1.5rem; }
+.sheet .cancel { background: none; border: 0; color: var(--muted); padding: 8px; min-height: 44px; }
+
+/* Setup */
+.setup { max-width: 560px; display: grid; gap: 14px; }
+.setup ol { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.setup form { display: flex; gap: 8px; flex-wrap: wrap; }
+.setup input { flex: 1 1 260px; min-width: 0; }
+.btn { border: 0; background: var(--accent); color: var(--surface); border-radius: 999px; min-height: 40px; padding: 8px 18px; font-weight: 600; }
+.btn.ghost { background: var(--surface-2); color: var(--fg); }
+.err { color: var(--billy); font-size: 0.9rem; }
+
+/* Narrow or square screens: only the selected person shows a name */
+@media (max-width: 600px) {
+  .head-row { flex-wrap: nowrap; }
+  .who-label { display: none; }
+  .person-btn[aria-pressed="false"] { padding-right: 4px; }
+  .person-btn[aria-pressed="false"] .pname { display: none; }
+  .who { flex-wrap: nowrap; gap: 4px; }
+  .chip { padding: 5px 10px; }
+}
+/* Small screens: phones in portrait */
+@media (max-width: 460px) {
+  .stats, .balance { grid-template-columns: 1fr; }
+  .head-row { flex-wrap: wrap; }
+  .brand h1 { white-space: nowrap; }
+  .summary { gap: 8px; }
+  .summary .sum-card { padding: 8px 10px; }
+  .summary .avatar { display: none; }
+  .summary .sum-top { flex-wrap: wrap; gap: 0 6px; }
+}
+/* Compact square or short screens (HomeView is about 544 × 544 points) */
+@media (max-height: 640px) and (min-width: 461px) {
+  body { font-size: 14.5px; }
+  .head-row { padding-block: 8px 2px; }
+  .brand h1 { font-size: 1.3rem; }
+  .tab { min-height: 40px; padding-block: 8px; }
+  main { padding-top: 14px; gap: 16px; }
+  .sum-card { padding: 8px 10px; gap: 4px; }
+  .sum-meta { font-size: 0.74rem; }
+  .group-head h2 { font-size: 1.15rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="head-row">
+      <div class="brand">
+        <h1>Chore Board</h1>
+        <span class="sync" id="sync" aria-live="polite"></span>
+      </div>
+      <div class="who" id="who" role="group" aria-label="This screen is for">
+        <span class="who-label">This screen</span>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button class="tab" role="tab" id="tab-today" data-view="today">Today</button>
+      <button class="tab" role="tab" id="tab-scores" data-view="scores">Scores</button>
+      <button class="tab" role="tab" id="tab-plan" data-view="plan">Chore plan</button>
+      <button class="tab" role="tab" id="tab-setup" data-view="setup">Setup</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+  <div class="banner" id="status" hidden></div>
+  <section id="view-today" hidden></section>
+  <section id="view-scores" hidden></section>
+  <section id="view-plan" hidden></section>
+  <section id="view-setup" hidden></section>
+</main>
+
+<div class="scrim" id="picker" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+    <h2 id="picker-title">Who did it?</h2>
+    <p id="picker-chore"></p>
+    <div class="pick" id="picker-people"></div>
+    <button class="cancel" id="picker-cancel">Cancel</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ---------- People ----------
+const PEOPLE = [
+  { id: 'Tracy',  color: 'var(--tracy)',  bg: 'var(--tracy-bg)' },
+  { id: 'Billy',  color: 'var(--billy)',  bg: 'var(--billy-bg)' },
+  { id: 'Vivian', color: 'var(--vivian)', bg: 'var(--vivian-bg)' },
+];
+const PBY = Object.fromEntries(PEOPLE.map(p => [p.id, p]));
+const NOBODY = { id: 'Anyone', color: 'var(--muted)', bg: 'var(--surface-2)' };
+const person = id => PBY[id] || NOBODY;
+const FREQ = { d: 'Daily', w: 'Weekly', m: 'Monthly' };
+
+// ---------- Starter plan (copied into the Google Sheet's Chores tab on first run) ----------
+const O = { T: 'Tracy', B: 'Billy', V: 'Vivian' };
+const STARTER = [
+  ['Foyer', [['foyer-shoes','Line up shoes, hang coats & bags','d',5,'V'],['foyer-mat','Shake out the entry mat','w',5,'V'],['foyer-floor','Sweep or vacuum the floor','w',10,'B'],['foyer-door','Wipe front door, glass & handles','m',10,'B']]],
+  ['Powder Room', [['powder-towel','Swap the hand towel','w',5,'V'],['powder-restock','Restock toilet paper & soap','w',5,'V'],['powder-sink','Wipe sink, counter & mirror','w',10,'T'],['powder-toilet','Clean the toilet','w',10,'T'],['powder-floor','Mop the floor','w',10,'T']]],
+  ['Living Room', [['living-pillows','Fluff pillows & fold blankets','d',5,'V'],['living-pickup','Evening 5-minute pickup','d',5,'B'],['living-vacuum','Vacuum rug & floors','w',15,'B'],['living-dust','Dust shelves, TV stand & tables','w',10,'T'],['living-remotes','Wipe remotes, switches & door knobs','m',5,'V'],['living-couch','Vacuum under couch cushions','m',15,'B']]],
+  ['Playroom', [['play-toys','Put toys back in their bins','d',5,'V'],['play-shelves','Organize bins & shelves','w',10,'V'],['play-table','Wipe table & art area','w',5,'V'],['play-vacuum','Vacuum the floor','w',10,'T'],['play-declutter','Sort out broken or outgrown toys','m',20,'T']]],
+  ['Hallway & Stairs', [['stairs-clear','Carry up anything left on the stairs','d',5,'V'],['stairs-vacuum','Vacuum hallway & stairs','w',15,'B'],['stairs-rail','Wipe the handrail','w',5,'V'],['stairs-baseboards','Dust baseboards','m',15,'T']]],
+  ['Kitchen', [['kitchen-load','Load & run the dishwasher','d',10,'B'],['kitchen-unload','Unload the dishwasher','d',10,'T'],['kitchen-counters','Wipe counters & stovetop','d',5,'T'],['kitchen-sweep','Sweep the floor','d',5,'B'],['kitchen-trash','Take out trash & recycling','w',10,'B'],['kitchen-mop','Mop the floor','w',15,'B'],['kitchen-microwave','Clean the microwave','w',10,'T'],['kitchen-fridge','Clear out old food from the fridge','w',15,'T'],['kitchen-fronts','Wipe appliance fronts & cabinet handles','w',5,'V'],['kitchen-sink','Scrub the sink','w',5,'T'],['kitchen-oven','Clean the oven','m',30,'B']]],
+  ['Dining Room', [['dining-set','Set the table for dinner','d',5,'V'],['dining-clear','Clear & wipe the table after dinner','d',5,'V'],['dining-vacuum','Vacuum under the table','w',10,'B'],['dining-chairs','Wipe down chairs','m',10,'V']]],
+  ['Laundry Room', [['laundry-load','Wash & dry a load','d',5,'T'],['laundry-fold','Fold & put away a load','d',10,'T'],['laundry-lint','Clean lint trap & wipe machines','w',5,'B'],['laundry-washer','Run a washer cleaning cycle','m',15,'B']]],
+  ["Parents' Bedroom", [['pbed-make','Make the bed','d',5,'T'],['pbed-sheets','Change the sheets','w',15,'B'],['pbed-vacuum','Vacuum','w',10,'B'],['pbed-dust','Dust nightstands & dresser','w',10,'T']]],
+  ["Parents' Bathroom", [['pbath-sinks','Wipe counters, sinks & mirror','w',10,'T'],['pbath-toilet','Clean the toilet','w',10,'B'],['pbath-shower','Scrub shower & tub','w',20,'B'],['pbath-floor','Mop the floor','w',10,'T'],['pbath-towels','Swap towels & bath mat','w',5,'T']]],
+  ["Parents' Closet", [['pcloset-away','Put clothes away','d',5,'B'],['pcloset-shelves','Refold & organize shelves','m',15,'T'],['pcloset-donate','Pull clothes to donate','m',15,'B']]],
+  ["Kids' Bedroom", [['kbed-make','Make the bed','d',5,'V'],['kbed-hamper','Dirty clothes in the hamper','d',5,'V'],['kbed-tidy','Tidy floor & desk','d',5,'V'],['kbed-sheets','Change the sheets (with a grown-up)','w',15,'V'],['kbed-vacuum','Vacuum','w',10,'T'],['kbed-dust','Dust shelves & nightstand','m',10,'V']]],
+  ["Kids' Bathroom", [['kbath-towels','Hang up towel & put away bath toys','d',5,'V'],['kbath-sink','Wipe counter, sink & mirror','w',10,'V'],['kbath-toilet','Clean the toilet','w',10,'B'],['kbath-tub','Scrub the tub','w',20,'T'],['kbath-floor','Mop the floor','w',10,'B']]],
+  ['Upstairs Hallway', [['up-clear','Clear clutter from the hallway','d',5,'B'],['up-vacuum','Vacuum','w',10,'T'],['up-switches','Dust & wipe light switches','m',10,'V']]],
+];
+const STARTER_CHORES = STARTER.flatMap(([room, list]) => list.map(([id, name, freq, pts, o]) => ({ id, room, name, freq, pts, owner: O[o] })));
+
+// ---------- Dates & periods ----------
+const pad = n => String(n).padStart(2, '0');
+const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const weekStart = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const periodKey = (freq, d) => freq === 'd' ? 'D' + dayKey(d) : freq === 'w' ? 'W' + dayKey(weekStart(d)) : 'M' + dayKey(d).slice(0, 7);
+const docId = (c, d) => `${periodKey(c.freq, d)}~${c.id}`;
+function sinceKey(now) { return dayKey([weekStart(now), new Date(now.getFullYear(), now.getMonth(), 1), addDays(now, -31)].reduce((a, b) => a < b ? a : b)); }
+
+// ---------- Storage helpers ----------
+const store = {
+  get(k) { try { return localStorage.getItem('chores.' + k); } catch (e) { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem('chores.' + k) : localStorage.setItem('chores.' + k, v); } catch (e) {} },
+};
+
+// ---------- State ----------
+let CHORES = STARTER_CHORES, CBY = {}, ROOMS = [];
+let server = new Map();      // completions from the sheet: id -> record
+let pending = [];            // ops not yet confirmed: {op:'done', record} | {op:'undo', id}
+let me = PBY[store.get('me')] ? store.get('me') : 'shared';
+let ownerFilter = store.get('filter') || (me === 'shared' ? 'all' : me);
+let view = 'today', roomFilter = 'all';
+let api = store.get('api');
+let syncState = api ? 'loading' : 'nosetup', lastSync = 0, busy = false;
+
+function setChores(list) {
+  CHORES = (list && list.length ? list : STARTER_CHORES).map(c => ({ ...c, pts: Number(c.pts) || 0 }));
+  CBY = Object.fromEntries(CHORES.map(c => [c.id, c]));
+  ROOMS = [...new Set(CHORES.map(c => c.room))];
+}
+function completions() {
+  const m = new Map(server);
+  for (const p of pending) p.op === 'done' ? m.set(p.record.id, p.record) : m.delete(p.id);
+  return m;
+}
+
+// Restore the last copy so the board shows instantly.
+try {
+  const cached = JSON.parse(store.get('cache') || 'null');
+  if (cached) { setChores(cached.chores); server = new Map(cached.completions.map(c => [c.id, c])); lastSync = cached.at || 0; }
+  else setChores(null);
+  pending = JSON.parse(store.get('pending') || '[]');
+} catch (e) { setChores(null); }
+
+// ---------- Setup link: #setup=<web app URL> ----------
+function validApi(url) {
+  if (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) return true;
+  return location.hostname === 'localhost' && /^http:\/\/localhost:\d+\/exec$/.test(url); // local testing only
+}
+function readSetupHash() {
+  const m = location.hash.match(/^#setup=(.+)$/);
+  if (!m) return false;
+  const url = decodeURIComponent(m[1]);
+  if (validApi(url)) { api = url; store.set('api', url); syncState = 'loading'; }
+  history.replaceState(null, '', location.pathname + location.search);
+  return true;
+}
+readSetupHash();
+window.addEventListener('hashchange', () => { if (readSetupHash()) { render(); sync(); } });
+
+// ---------- Sync with the Google Sheet ----------
+function applyState(s) {
+  if (!s || !s.ok) throw new Error('bad response');
+  setChores(s.chores);
+  server = new Map((s.completions || []).map(c => [c.id, c]));
+  lastSync = Date.now(); syncState = 'ok';
+  store.set('cache', JSON.stringify({ chores: s.chores, completions: s.completions, at: lastSync }));
+}
+async function call(body) {
+  const opts = body
+    ? { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, since: sinceKey(new Date()) }) }
+    : { method: 'GET' };
+  const url = body ? api : `${api}?since=${encodeURIComponent(sinceKey(new Date()))}`;
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(url, { ...opts, signal: ctl.signal, redirect: 'follow', cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+async function sync() {
+  if (!api || busy) return;
+  busy = true;
+  try {
+    while (pending.length) {
+      applyState(await call(pending[0]));
+      pending.shift(); store.set('pending', JSON.stringify(pending));
+    }
+    let s = await call(null);
+    if (!s.chores || !s.chores.length) s = await call({ op: 'seed', chores: STARTER_CHORES });
+    applyState(s);
+  } catch (e) {
+    syncState = 'error';
+  } finally {
+    busy = false; render();
+    if (pending.length && syncState === 'ok') setTimeout(sync, 0);
+  }
+}
+function queue(op) { pending.push(op); store.set('pending', JSON.stringify(pending)); render(); sync(); }
+
+// ---------- UI helpers ----------
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ptsHtml = n => `<span class="pts"><span class="star" aria-hidden="true">★</span> ${n}</span>`;
+const pVars = p => `--pc:${p.color};--pbg:${p.bg}`;
+const avatar = p => `<span class="avatar" style="${pVars(p)}" aria-hidden="true">${esc(p.id[0])}</span>`;
+
+function renderWho() {
+  const box = document.getElementById('who');
+  box.querySelectorAll('.person-btn').forEach(b => b.remove());
+  const opts = [{ id: 'shared', label: 'Everyone', p: { id: '★', color: 'var(--accent)', bg: 'var(--all-bg)' } }].concat(PEOPLE.map(p => ({ id: p.id, label: p.id, p })));
+  for (const o of opts) {
+    const b = document.createElement('button');
+    b.className = 'person-btn'; b.id = 'me-' + o.id; b.style.cssText = pVars(o.p);
+    b.setAttribute('aria-pressed', String(me === o.id));
+    b.title = o.id === 'shared' ? 'Shared screen: ask who did each chore' : `This is ${o.label}'s device`;
+    b.innerHTML = `${avatar(o.p)}<span class="pname">${esc(o.label)}</span>`;
+    b.onclick = () => { me = o.id; store.set('me', me); ownerFilter = me === 'shared' ? 'all' : me; store.set('filter', ownerFilter); renderWho(); render(); };
+    box.appendChild(b);
+  }
+}
+
+function pointsBetween(m, who, from, to) { let t = 0; for (const c of m.values()) if (c.person === who && c.date >= from && c.date <= to) t += Number(c.pts) || 0; return t; }
+function streak(m, who, now) {
+  const daily = CHORES.filter(c => c.owner === who && c.freq === 'd');
+  if (!daily.length) return 0;
+  const allDone = d => daily.every(c => m.has(docId(c, d)));
+  let d = allDone(now) ? now : addDays(now, -1), n = 0;
+  while (n < 31 && allDone(d)) { n++; d = addDays(d, -1); }
+  return n;
+}
+
+// ---------- Today ----------
+function choreRow(c, m, now) {
+  const done = m.get(docId(c, now));
+  const owner = person(c.owner);
+  let sub = `<span>${esc(c.room)}</span><span aria-hidden="true">·</span><span class="owner-tag"><span class="dot" style="${pVars(owner)}"></span>${esc(owner.id)}</span>`;
+  if (done) sub += `<span aria-hidden="true">·</span><span class="done-by">Done by ${esc(person(done.person).id)}</span><button class="undo" data-undo="${esc(c.id)}">Undo</button>`;
+  else if (me !== 'shared' && c.owner !== me) sub += `<span aria-hidden="true">·</span><span class="bounty">Do it and the points are yours</span>`;
+  return `<div class="chore${done ? ' done' : ''}">
+    <button class="check" data-check="${esc(c.id)}" ${done ? 'disabled' : ''} aria-label="${done ? 'Done' : 'Mark done'}: ${esc(c.name)}">
+      <svg viewBox="0 0 16 16" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg>
+    </button>
+    <div class="chore-main"><span class="chore-name">${esc(c.name)}</span><span class="chore-sub">${sub}</span></div>
+    ${ptsHtml(c.pts)}
+  </div>`;
+}
+function renderToday(m, now) {
+  const wk = weekStart(now), weekFrom = dayKey(wk), today = dayKey(now);
+  const cards = PEOPLE.map(p => {
+    const list = CHORES.filter(c => c.owner === p.id);
+    const doneN = list.filter(c => m.has(docId(c, now))).length;
+    const pct = list.length ? Math.round(doneN / list.length * 100) : 0;
+    const s = streak(m, p.id, now);
+    return `<div class="sum-card" style="${pVars(p)}">
+      <div class="sum-top"><span class="sum-name">${avatar(p)}${esc(p.id)}</span>${ptsHtml(pointsBetween(m, p.id, weekFrom, today))}</div>
+      <div class="bar" role="img" aria-label="${pct}% of ${esc(p.id)}'s chores done"><span style="width:${pct}%"></span></div>
+      <div class="sum-meta">${doneN}/${list.length} done${s ? ` · ${s}-day streak` : ''}</div>
+    </div>`;
+  }).join('');
+  const pool = CHORES.filter(c => (ownerFilter === 'all' || c.owner === ownerFilter) && (roomFilter === 'all' || c.room === roomFilter));
+  const daysLeftWeek = 7 - Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - wk) / 864e5);
+  const daysLeftMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1;
+  const plural = n => n === 1 ? '' : 's';
+  const groups = [['d', 'Every day', 'resets at midnight'], ['w', 'This week', `${daysLeftWeek} day${plural(daysLeftWeek)} left`], ['m', 'This month', `${daysLeftMonth} day${plural(daysLeftMonth)} left`]]
+    .map(([f, title, note]) => {
+      const items = pool.filter(c => c.freq === f);
+      if (!items.length) return '';
+      items.sort((a, b) => m.has(docId(a, now)) - m.has(docId(b, now)));
+      const doneN = items.filter(c => m.has(docId(c, now))).length;
+      return `<div class="group"><div class="group-head"><h2>${title}</h2><span>${doneN}/${items.length} done · ${note}</span></div>
+        <div class="list">${items.map(c => choreRow(c, m, now)).join('')}</div></div>`;
+    }).join('');
+  const chip = (id, label, p) => `<button class="chip" data-owner="${esc(id)}" aria-pressed="${ownerFilter === id}">${p ? `<span class="dot" style="${pVars(p)}"></span>` : ''}${esc(label)}</button>`;
+  const roomOpts = ['<option value="all">All rooms</option>'].concat(ROOMS.map(r => `<option value="${esc(r)}" ${roomFilter === r ? 'selected' : ''}>${esc(r)}</option>`)).join('');
+  document.getElementById('view-today').innerHTML = `
+    <div class="summary">${cards}</div>
+    <div class="filters">${chip('all', 'Everyone')}${PEOPLE.map(p => chip(p.id, p.id, p)).join('')}
+      <select id="room-filter" aria-label="Room">${roomOpts}</select></div>
+    ${groups || '<div class="list"><div class="empty">No chores match these filters.</div></div>'}`;
+}
+
+// ---------- Scores ----------
+function renderScores(m, now) {
+  const today = dayKey(now), weekFrom = dayKey(weekStart(now)), monthFrom = today.slice(0, 7) + '-01';
+  const rows = PEOPLE.map(p => ({ p, week: pointsBetween(m, p.id, weekFrom, today), today: pointsBetween(m, p.id, today, today), month: pointsBetween(m, p.id, monthFrom, today), streak: streak(m, p.id, now) })).sort((a, b) => b.week - a.week);
+  const top = Math.max(1, ...rows.map(r => r.week));
+  const board = rows.map((r, i) => `<div class="rank" style="${pVars(r.p)}"><span class="place">${r.week ? i + 1 : '–'}</span>
+      <div class="rank-body"><span class="rank-name">${avatar(r.p)}${esc(r.p.id)}</span><div class="bar"><span style="width:${Math.round(r.week / top * 100)}%"></span></div></div>
+      <span class="pts big"><span class="star" aria-hidden="true">★</span> ${r.week}<small>this week</small></span></div>`).join('');
+  const stat = (title, key, fmt) => `<div class="stat"><h3>${esc(title)}</h3><table>${PEOPLE.map(p => `<tr><td><span class="owner-tag"><span class="dot" style="${pVars(p)}"></span>${esc(p.id)}</span></td><td>${fmt(rows.find(x => x.p === p)[key])}</td></tr>`).join('')}</table></div>`;
+  const recent = [...m.values()].sort((a, b) => b.ts - a.ts).slice(0, 15);
+  const feed = recent.length ? recent.map(c => {
+    const p = person(c.person), ch = CBY[c.chore], t = new Date(Number(c.ts));
+    const when = dayKey(t) === today ? t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : t.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    return `<div class="feed-row">${avatar(p)}<span class="txt"><strong>${esc(p.id)}</strong> ${esc(ch ? ch.name.charAt(0).toLowerCase() + ch.name.slice(1) : 'did a chore')}${ch ? ` <span style="color:var(--muted)">· ${esc(ch.room)}</span>` : ''}</span>${ptsHtml(c.pts)}<time>${esc(when)}</time></div>`;
+  }).join('') : '<div class="empty">No chores checked off yet. The first one gets the board started.</div>';
+  document.getElementById('view-scores').innerHTML = `
+    <div class="group"><div class="group-head"><h2>This week's leaderboard</h2><span>Week of ${weekStart(now).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span></div><div class="board">${board}</div></div>
+    <div class="stats">${stat('Today', 'today', v => `★ ${v}`)}${stat(now.toLocaleDateString([], { month: 'long' }), 'month', v => `★ ${v}`)}${stat('Daily streak', 'streak', v => `${v} day${v === 1 ? '' : 's'}`)}</div>
+    <div class="group"><div class="group-head"><h2>Recent activity</h2></div><div class="feed">${feed}</div></div>
+    <p class="sum-meta">A streak counts the days in a row that all of a person's own daily chores got done.</p>`;
+}
+
+// ---------- Plan ----------
+function renderPlan() {
+  const bal = PEOPLE.map(p => {
+    const mine = CHORES.filter(c => c.owner === p.id);
+    const wk = Math.round(mine.reduce((t, c) => t + (c.freq === 'd' ? c.pts * 7 : c.freq === 'w' ? c.pts : c.pts / 4.3), 0));
+    const n = f => mine.filter(c => c.freq === f).length;
+    return `<div class="sum-card" style="${pVars(p)}"><div class="sum-top"><span class="sum-name">${avatar(p)}${esc(p.id)}</span>${ptsHtml(wk)}</div>
+      <div class="sum-meta">${mine.length} chores: ${n('d')} daily, ${n('w')} weekly, ${n('m')} monthly · about ${wk} points a week</div></div>`;
+  }).join('');
+  const rooms = ROOMS.map(r => {
+    const list = CHORES.filter(c => c.room === r);
+    return `<div class="room"><h3>${esc(r)} <span>${list.length} chores</span></h3><ul>${list.map(c => {
+      const p = person(c.owner);
+      return `<li><span class="freq">${FREQ[c.freq]}</span><span>${esc(c.name)}</span><span class="owner-tag" title="${esc(p.id)}"><span class="dot" style="${pVars(p)}"></span>${esc(p.id[0])}</span>${ptsHtml(c.pts)}</li>`;
+    }).join('')}</ul></div>`;
+  }).join('');
+  document.getElementById('view-plan').innerHTML = `
+    <div class="plan-intro"><h2>How the board works</h2>
+      <p>Every chore has an owner and a point value: 5 for quick jobs, 10 to 15 for medium ones, 20 to 30 for big cleans. Daily chores reset at midnight, weekly ones on Monday, monthly ones on the 1st.</p>
+      <p>Anyone can do anyone's chore. Whoever checks it off gets the points. To change chores, owners or points, edit the Chores tab in the Google Sheet.</p></div>
+    <div class="balance">${bal}</div>
+    <div class="legend">${PEOPLE.map(p => `<span class="owner-tag"><span class="dot" style="${pVars(p)}"></span>${esc(p.id)}</span>`).join('')}<span>★ points</span></div>
+    <div class="rooms">${rooms}</div>`;
+}
+
+// ---------- Setup ----------
+function renderSetup() {
+  document.getElementById('view-setup').innerHTML = `
+    <div class="setup">
+      <h2>Connect this device</h2>
+      <p>${api ? 'This device is connected to your family\'s Google Sheet.' : 'Paste the web app link from your Google Sheet\'s Apps Script deployment, or open the setup link that was shared with you.'}</p>
+      <form id="setup-form">
+        <input type="url" id="api-url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(api || '')}" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="btn" type="submit">${api ? 'Save' : 'Connect'}</button>
+      </form>
+      <p class="err" id="setup-err" hidden></p>
+      ${api ? `<div><button class="btn ghost" id="copy-link" type="button">Copy setup link for another device</button> <span class="sum-meta" id="copy-note"></span></div>` : ''}
+      <h3>Add to the Home Screen</h3>
+      <ol>
+        <li>Open this page in Safari.</li>
+        <li>Tap the Share button, then <strong>Add to Home Screen</strong>.</li>
+        <li>On each phone, tap your name at the top so check-offs go to you. On a shared screen like HomeView, choose <strong>Everyone</strong> and the board will ask who did each chore.</li>
+      </ol>
+    </div>`;
+}
+
+// ---------- Render ----------
+function render() {
+  const now = new Date(), m = completions();
+  for (const v of ['today', 'scores', 'plan', 'setup']) {
+    document.getElementById('view-' + v).hidden = v !== view;
+    document.getElementById('tab-' + v).setAttribute('aria-selected', String(v === view));
+  }
+  const syncEl = document.getElementById('sync');
+  syncEl.className = 'sync' + (syncState === 'error' ? ' bad' : '');
+  syncEl.textContent = syncState === 'nosetup' ? 'Not connected'
+    : syncState === 'error' ? (pending.length ? `Offline · ${pending.length} waiting` : 'Offline')
+    : syncState === 'loading' || pending.length ? 'Syncing…'
+    : lastSync ? `Updated ${new Date(lastSync).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
+  const st = document.getElementById('status');
+  const msg = syncState === 'nosetup' && view !== 'setup' ? 'This device isn\'t connected to the family sheet yet, so check-offs stay on this device. Open Setup to connect it.'
+    : syncState === 'error' && view !== 'setup' ? 'Can\'t reach the Google Sheet. Check-offs will be saved when the connection comes back.' : '';
+  st.hidden = !msg; st.textContent = msg;
+  if (view === 'today') renderToday(m, now);
+  else if (view === 'scores') renderScores(m, now);
+  else if (view === 'plan') renderPlan();
+  else renderSetup();
+}
+function setView(v) { view = ['today', 'scores', 'plan', 'setup'].includes(v) ? v : 'today'; render(); window.scrollTo(0, 0); }
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => setView(t.dataset.view));
+
+// ---------- Actions ----------
+let pickFor = null;
+function complete(choreId, who) {
+  const c = CBY[choreId]; if (!c) return;
+  const now = new Date();
+  const record = { id: docId(c, now), chore: c.id, person: who, pts: c.pts, period: periodKey(c.freq, now), date: dayKey(now), ts: now.getTime() };
+  if (!api) { server.set(record.id, record); render(); return; }
+  queue({ op: 'done', record });
+}
+function openPicker(choreId) {
+  pickFor = choreId;
+  document.getElementById('picker-chore').textContent = CBY[choreId].name;
+  document.getElementById('picker-people').innerHTML = PEOPLE.map(p => `<button style="${pVars(p)}" data-pick="${esc(p.id)}">${avatar(p)}${esc(p.id)}</button>`).join('');
+  document.getElementById('picker').hidden = false;
+}
+function closePicker() { document.getElementById('picker').hidden = true; pickFor = null; }
+document.getElementById('picker').addEventListener('click', e => {
+  const b = e.target.closest('[data-pick]');
+  if (b && pickFor) { const id = pickFor; closePicker(); complete(id, b.dataset.pick); return; }
+  if (e.target.id === 'picker' || e.target.id === 'picker-cancel') closePicker();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && pickFor) closePicker(); });
+
+document.getElementById('main').addEventListener('click', async e => {
+  const f = e.target.closest('[data-owner]');
+  if (f) { ownerFilter = f.dataset.owner; store.set('filter', ownerFilter); render(); return; }
+  const chk = e.target.closest('[data-check]');
+  if (chk) { me === 'shared' ? openPicker(chk.dataset.check) : complete(chk.dataset.check, me); return; }
+  const u = e.target.closest('[data-undo]');
+  if (u) {
+    const c = CBY[u.dataset.undo]; if (!c) return;
+    const id = docId(c, new Date());
+    if (!api) { server.delete(id); render(); return; }
+    queue({ op: 'undo', id });
+    return;
+  }
+  if (e.target.id === 'copy-link') {
+    const link = `${location.origin}${location.pathname}#setup=${encodeURIComponent(api)}`;
+    const note = document.getElementById('copy-note');
+    try { await navigator.clipboard.writeText(link); note.textContent = 'Copied. Send it to the other device in Messages.'; }
+    catch (err) { note.textContent = link; }
+  }
+});
+document.getElementById('main').addEventListener('change', e => { if (e.target.id === 'room-filter') { roomFilter = e.target.value; render(); } });
+document.getElementById('main').addEventListener('submit', async e => {
+  if (e.target.id !== 'setup-form') return;
+  e.preventDefault();
+  const url = document.getElementById('api-url').value.trim();
+  const err = document.getElementById('setup-err');
+  if (!validApi(url)) { err.hidden = false; err.textContent = 'That doesn\'t look like an Apps Script web app link. It should start with https://script.google.com/macros/s/ and end with /exec.'; return; }
+  api = url; store.set('api', url); syncState = 'loading'; render();
+  await sync();
+  if (syncState === 'ok') setView('today');
+  else { const e2 = document.getElementById('setup-err'); e2.hidden = false; e2.textContent = 'Couldn\'t reach that link. Check that the deployment\'s access is set to Anyone.'; }
+});
+
+// ---------- Start ----------
+renderWho();
+setView('today');
+sync();
+setInterval(() => { if (document.visibilityState === 'visible') sync(); }, 20000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });
+let lastDay = dayKey(new Date());
+setInterval(() => { const d = dayKey(new Date()); if (d !== lastDay) { lastDay = d; render(); } }, 60000);
+</script>
+</body>
+</html>
