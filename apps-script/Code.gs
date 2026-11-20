@@ -6,13 +6,13 @@
  *
  * The sheet gets two tabs:
  *   Chores       Room | Chore | Frequency | Points | Owner | ID   (edit this tab to change the plan)
- *   Completions  ID | Chore ID | Person | Points | Period | Date | Time
+ *   Completions  ID | Chore ID | Person | Points | Period | Date | Time | Bonus
  */
 
 const CHORES_TAB = 'Chores';
 const DONE_TAB = 'Completions';
 const CHORE_HEADERS = ['Room', 'Chore', 'Frequency', 'Points', 'Owner', 'ID'];
-const DONE_HEADERS = ['ID', 'Chore ID', 'Person', 'Points', 'Period', 'Date', 'Time'];
+const DONE_HEADERS = ['ID', 'Chore ID', 'Person', 'Points', 'Period', 'Date', 'Time', 'Bonus'];
 const PEOPLE = ['Tracy', 'Billy', 'Vivian'];
 // Leave blank when the script is opened from the sheet (Extensions > Apps Script).
 // For a standalone script, paste the sheet's ID from its URL: docs.google.com/spreadsheets/d/<ID>/edit
@@ -102,12 +102,20 @@ function readChores_() {
 }
 
 function readState_(since) {
-  const done = rows_(tab_(DONE_TAB, DONE_HEADERS))
+  const all = rows_(tab_(DONE_TAB, DONE_HEADERS))
     .map(function (r) {
-      return { id: String(r[0]), chore: String(r[1]), person: String(r[2]), pts: Number(r[3]) || 0, period: String(r[4]), date: dateText_(r[5]), ts: Number(r[6]) || 0 };
+      return { id: String(r[0]), chore: String(r[1]), person: String(r[2]), pts: Number(r[3]) || 0, period: String(r[4]), date: dateText_(r[5]), ts: Number(r[6]) || 0, bonus: Number(r[7]) || 0 };
     })
-    .filter(function (c) { return c.id && (!since || c.date >= since); });
-  return { ok: true, people: PEOPLE, chores: readChores_(), completions: done };
+    .filter(function (c) { return c.id; });
+  // Last date each chore was done, and the board's first day, so skipped chores can earn bonus points.
+  const last = {};
+  let first = '';
+  all.forEach(function (c) {
+    if (!last[c.chore] || c.date > last[c.chore]) last[c.chore] = c.date;
+    if (!first || c.date < first) first = c.date;
+  });
+  const done = all.filter(function (c) { return !since || c.date >= since; });
+  return { ok: true, people: PEOPLE, chores: readChores_(), completions: done, last: last, first: first };
 }
 
 function markDone_(rec) {
@@ -116,8 +124,8 @@ function markDone_(rec) {
   const sh = tab_(DONE_TAB, DONE_HEADERS);
   const ids = rows_(sh).map(function (r) { return String(r[0]); });
   if (ids.indexOf(id) >= 0) return; // already done this period
-  sh.getRange(sh.getLastRow() + 1, 1, 1, 7).setNumberFormat('@').setValues([[
-    id, String(rec.chore || ''), rec.person, Number(rec.pts) || 0, String(rec.period || ''), String(rec.date || ''), String(Number(rec.ts) || Date.now()),
+  sh.getRange(sh.getLastRow() + 1, 1, 1, 8).setNumberFormat('@').setValues([[
+    id, String(rec.chore || ''), rec.person, Number(rec.pts) || 0, String(rec.period || ''), String(rec.date || ''), String(Number(rec.ts) || Date.now()), Number(rec.bonus) || 0,
   ]]);
 }
 

@@ -25,7 +25,8 @@
   --accent: #2f5bd3; --done: #1f8a5b; --star: #c98a00; --scrim: rgba(17, 21, 29, .45);
   --tracy: #e8197d; --billy: #d42a2a; --vivian: #4fb6ec;
   --tracy-bg: #fde3f0; --billy-bg: #fbe2e2; --vivian-bg: #e0f2fc; --all-bg: #e1e8f8;
-  --tracy-ink: #111111; --billy-ink: #111111; --vivian-ink: #111111;
+  --warn: #b5530a; --warn-bg: #fff3e2;
+  --tracy-ink: #ffffff; --billy-ink: #ffffff; --vivian-ink: #0b2c45;
   --font-display: "Fredoka", "Avenir Next Rounded", ui-rounded, "Trebuchet MS", system-ui, sans-serif;
   --font-body: "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
   --radius: 12px;
@@ -37,7 +38,8 @@
     --accent: #7c9cff; --done: #4fcf93; --star: #f2b93b; --scrim: rgba(0, 0, 0, .6);
     --tracy: #ff5cae; --billy: #ff5c5c; --vivian: #7fcdf5;
     --tracy-bg: #3d1630; --billy-bg: #3d1a1a; --vivian-bg: #12304a; --all-bg: #1f2a44;
-    --tracy-ink: #111111; --billy-ink: #111111; --vivian-ink: #111111;
+    --warn: #f5a54a; --warn-bg: #2e2216;
+    --tracy-ink: #1a0d14; --billy-ink: #1a0d0d; --vivian-ink: #0b1f30;
     color-scheme: dark;
   }
 }
@@ -106,6 +108,28 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
 .bounty { color: var(--star); font-weight: 600; }
 .undo { background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: 0.8rem; padding: 4px 6px; }
 .empty { padding: 18px 14px; color: var(--muted); font-size: 0.9rem; }
+.chore.overdue { background: var(--warn-bg); box-shadow: inset 4px 0 0 var(--warn); }
+.skipped { color: var(--warn); font-weight: 600; }
+.pts-stack { display: grid; justify-items: end; gap: 0; }
+.bonus { font-size: 0.72rem; font-weight: 700; color: var(--warn); white-space: nowrap; }
+
+/* History */
+.grid-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+table.grid { border-collapse: collapse; font-size: 0.8rem; min-width: 100%; font-variant-numeric: tabular-nums; }
+.grid th, .grid td { padding: 5px 4px; text-align: center; border-top: 1px solid var(--line); }
+.grid thead th { border-top: 0; color: var(--muted); font-weight: 500; font-size: 0.7rem; line-height: 1.2; }
+.grid thead th.today { color: var(--fg); font-weight: 700; }
+.grid .name { position: sticky; left: 0; background: var(--surface); text-align: left; padding-left: 12px; min-width: 150px; max-width: 210px; font-size: 0.82rem; }
+.grid .name .dot { margin-right: 6px; }
+.cell { width: 18px; height: 18px; border-radius: 50%; display: inline-block; vertical-align: middle; }
+.cell.done { background: var(--pc); }
+.cell.miss { border: 2px solid var(--warn); }
+.cell.open { border: 2px dashed var(--line); }
+.cell.na { width: 6px; height: 6px; background: var(--line); }
+.legend .cell { width: 12px; height: 12px; margin-right: 4px; }
+.log-day { display: grid; gap: 6px; }
+.log-day h3 { font-size: 0.95rem; color: var(--muted); }
+.rate { display: grid; gap: 4px; }
 
 .board { display: grid; gap: 10px; }
 .rank { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
@@ -208,7 +232,8 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
     <nav class="tabs" role="tablist" aria-label="Views">
       <button class="tab" role="tab" id="tab-today" data-view="today">Today</button>
       <button class="tab" role="tab" id="tab-scores" data-view="scores">Scores</button>
-      <button class="tab" role="tab" id="tab-plan" data-view="plan">Chore plan</button>
+      <button class="tab" role="tab" id="tab-history" data-view="history">History</button>
+      <button class="tab" role="tab" id="tab-plan" data-view="plan">Plan</button>
       <button class="tab" role="tab" id="tab-setup" data-view="setup">Setup</button>
     </nav>
   </div>
@@ -218,6 +243,7 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
   <div class="banner" id="status" hidden></div>
   <section id="view-today" hidden></section>
   <section id="view-scores" hidden></section>
+  <section id="view-history" hidden></section>
   <section id="view-plan" hidden></section>
   <section id="view-setup" hidden></section>
 </main>
@@ -271,7 +297,7 @@ const weekStart = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.get
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const periodKey = (freq, d) => freq === 'd' ? 'D' + dayKey(d) : freq === 'w' ? 'W' + dayKey(weekStart(d)) : 'M' + dayKey(d).slice(0, 7);
 const docId = (c, d) => `${periodKey(c.freq, d)}~${c.id}`;
-function sinceKey(now) { return dayKey([weekStart(now), new Date(now.getFullYear(), now.getMonth(), 1), addDays(now, -31)].reduce((a, b) => a < b ? a : b)); }
+function sinceKey(now) { return dayKey([weekStart(now), new Date(now.getFullYear(), now.getMonth(), 1), addDays(now, -35)].reduce((a, b) => a < b ? a : b)); }
 
 // ---------- Storage helpers ----------
 const store = {
@@ -281,6 +307,7 @@ const store = {
 
 // ---------- State ----------
 let CHORES = STARTER_CHORES, CBY = {}, ROOMS = [];
+let lastDone = {}, boardStart = ''; // from the sheet: last date each chore was done, first day of the board
 let server = new Map();      // completions from the sheet: id -> record
 let pending = [];            // ops not yet confirmed: {op:'done', record} | {op:'undo', id}
 let me = PBY[store.get('me')] ? store.get('me') : 'shared';
@@ -303,7 +330,7 @@ function completions() {
 // Restore the last copy so the board shows instantly.
 try {
   const cached = JSON.parse(store.get('cache') || 'null');
-  if (cached) { setChores(cached.chores); server = new Map(cached.completions.map(c => [c.id, c])); lastSync = cached.at || 0; }
+  if (cached) { setChores(cached.chores); server = new Map(cached.completions.map(c => [c.id, c])); lastSync = cached.at || 0; lastDone = cached.last || {}; boardStart = cached.first || ''; }
   else setChores(null);
   pending = JSON.parse(store.get('pending') || '[]');
 } catch (e) { setChores(null); }
@@ -330,7 +357,8 @@ function applyState(s) {
   setChores(s.chores);
   server = new Map((s.completions || []).map(c => [c.id, c]));
   lastSync = Date.now(); syncState = 'ok';
-  store.set('cache', JSON.stringify({ chores: s.chores, completions: s.completions, at: lastSync }));
+  lastDone = s.last || {}; boardStart = s.first || '';
+  store.set('cache', JSON.stringify({ chores: s.chores, completions: s.completions, at: lastSync, last: lastDone, first: boardStart }));
 }
 async function call(body) {
   const opts = body
@@ -395,19 +423,45 @@ function streak(m, who, now) {
   return n;
 }
 
+// ---------- Skipped chores earn bonus points ----------
+// Each period a chore is skipped adds 50% of its points, up to triple points after 4 skips.
+const MAX_SKIPS = 4;
+const parseDay = k => { const [y, mo, d] = k.split('-').map(Number); return new Date(y, mo - 1, d); };
+function periodIndex(freq, d) {
+  if (freq === 'm') return d.getFullYear() * 12 + d.getMonth();
+  const x = freq === 'w' ? weekStart(d) : d;
+  const days = Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()) / 864e5;
+  return freq === 'w' ? Math.round(days / 7) : days;
+}
+function lastDoneKey(c, m) { let k = lastDone[c.id] || ''; for (const r of m.values()) if (r.chore === c.id && r.date > k) k = r.date; return k; }
+function startKey(m, now) { let k = boardStart || ''; for (const r of m.values()) if (!k || r.date < k) k = r.date; return k || dayKey(now); }
+function skips(c, m, now) {
+  if (m.has(docId(c, now))) return 0;
+  const cur = periodIndex(c.freq, now), last = lastDoneKey(c, m);
+  const n = last ? cur - periodIndex(c.freq, parseDay(last)) - 1 : cur - periodIndex(c.freq, parseDay(startKey(m, now)));
+  return Math.max(0, n);
+}
+const bonusFor = (c, n) => n > 0 ? Math.round(c.pts * 0.5 * Math.min(n, MAX_SKIPS)) : 0;
+const UNIT = { d: 'day', w: 'week', m: 'month' };
+const skipText = (c, n) => `Skipped ${n > 1 ? n + ' ' + UNIT[c.freq] + 's' : UNIT[c.freq] === 'day' ? 'yesterday' : 'last ' + UNIT[c.freq]}`;
+
 // ---------- Today ----------
 function choreRow(c, m, now) {
   const done = m.get(docId(c, now));
   const owner = person(c.owner);
   let sub = `<span>${esc(c.room)}</span><span aria-hidden="true">·</span><span class="owner-tag"><span class="dot" style="${pVars(owner)}"></span>${esc(owner.id)}</span>`;
   if (done) sub += `<span aria-hidden="true">·</span><span class="done-by">Done by ${esc(person(done.person).id)}</span><button class="undo" data-undo="${esc(c.id)}">Undo</button>`;
-  else if (me !== 'shared' && c.owner !== me) sub += `<span aria-hidden="true">·</span><span class="bounty">Do it and the points are yours</span>`;
-  return `<div class="chore${done ? ' done' : ''}">
+  const n = done ? 0 : skips(c, m, now), b = bonusFor(c, n);
+  if (n) sub += `<span aria-hidden="true">·</span><span class="skipped">${skipText(c, n)}</span>`;
+  else if (!done && me !== 'shared' && c.owner !== me) sub += `<span aria-hidden="true">·</span><span class="bounty">Do it and the points are yours</span>`;
+  const pts = done ? done.pts : c.pts + b;
+  const ptsBlock = (done ? done.bonus : b) ? `<span class="pts-stack">${ptsHtml(pts)}<span class="bonus">+${done ? done.bonus : b} bonus</span></span>` : ptsHtml(pts);
+  return `<div class="chore${done ? ' done' : ''}${n >= 2 ? ' overdue' : ''}">
     <button class="check" data-check="${esc(c.id)}" ${done ? 'disabled' : ''} aria-label="${done ? 'Done' : 'Mark done'}: ${esc(c.name)}">
       <svg viewBox="0 0 16 16" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg>
     </button>
     <div class="chore-main"><span class="chore-name">${esc(c.name)}</span><span class="chore-sub">${sub}</span></div>
-    ${ptsHtml(c.pts)}
+    ${ptsBlock}
   </div>`;
 }
 function renderToday(m, now) {
@@ -431,7 +485,7 @@ function renderToday(m, now) {
     .map(([f, title, note]) => {
       const items = pool.filter(c => c.freq === f);
       if (!items.length) return '';
-      items.sort((a, b) => m.has(docId(a, now)) - m.has(docId(b, now)));
+      items.sort((a, b) => (m.has(docId(a, now)) - m.has(docId(b, now))) || (skips(b, m, now) - skips(a, m, now)));
       const doneN = items.filter(c => m.has(docId(c, now))).length;
       return `<div class="group"><div class="group-head"><h2>${title}</h2><span>${doneN}/${items.length} done · ${note}</span></div>
         <div class="list">${items.map(c => choreRow(c, m, now)).join('')}</div></div>`;
@@ -458,13 +512,87 @@ function renderScores(m, now) {
   const feed = recent.length ? recent.map(c => {
     const p = person(c.person), ch = CBY[c.chore], t = new Date(Number(c.ts));
     const when = dayKey(t) === today ? t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : t.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-    return `<div class="feed-row">${avatar(p)}<span class="txt"><strong>${esc(p.id)}</strong> ${esc(ch ? ch.name.charAt(0).toLowerCase() + ch.name.slice(1) : 'did a chore')}${ch ? ` <span style="color:var(--muted)">· ${esc(ch.room)}</span>` : ''}</span>${ptsHtml(c.pts)}<time>${esc(when)}</time></div>`;
+    return `<div class="feed-row">${avatar(p)}<span class="txt"><strong>${esc(p.id)}</strong> ${esc(ch ? ch.name.charAt(0).toLowerCase() + ch.name.slice(1) : 'did a chore')}${ch ? ` <span style="color:var(--muted)">· ${esc(ch.room)}</span>` : ''}</span>${ptsHtml(c.pts)}${c.bonus ? `<span class="bonus">+${c.bonus}</span>` : ''}<time>${esc(when)}</time></div>`;
   }).join('') : '<div class="empty">No chores checked off yet. The first one gets the board started.</div>';
   document.getElementById('view-scores').innerHTML = `
     <div class="group"><div class="group-head"><h2>This week's leaderboard</h2><span>Week of ${weekStart(now).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span></div><div class="board">${board}</div></div>
     <div class="stats">${stat('Today', 'today', v => `★ ${v}`)}${stat(now.toLocaleDateString([], { month: 'long' }), 'month', v => `★ ${v}`)}${stat('Daily streak', 'streak', v => `${v} day${v === 1 ? '' : 's'}`)}</div>
     <div class="group"><div class="group-head"><h2>Recent activity</h2></div><div class="feed">${feed}</div></div>
     <p class="sum-meta">A streak counts the days in a row that all of a person's own daily chores got done.</p>`;
+}
+
+// ---------- History ----------
+function renderHistory(m, now) {
+  const today = dayKey(now), start = startKey(m, now);
+  const shortDay = d => d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+  // How each person did on their own daily chores over the last 7 days
+  const days7 = [...Array(7)].map((_, i) => addDays(now, i - 6)).filter(d => dayKey(d) >= start);
+  const rates = PEOPLE.map(p => {
+    const own = CHORES.filter(c => c.owner === p.id && c.freq === 'd');
+    const exp = own.length * days7.length;
+    const got = days7.reduce((t, d) => t + own.filter(c => m.has(docId(c, d))).length, 0);
+    const pct = exp ? Math.round(got / exp * 100) : 0;
+    return `<div class="sum-card rate" style="${pVars(p)}"><div class="sum-top"><span class="sum-name">${avatar(p)}${esc(p.id)}</span><span class="pts">${pct}%</span></div>
+      <div class="bar"><span style="width:${pct}%"></span></div><div class="sum-meta">${got} of ${exp} daily chores</div></div>`;
+  }).join('');
+
+  // Chores being skipped right now
+  const skipped = CHORES.map(c => ({ c, n: skips(c, m, now) })).filter(x => x.n).sort((a, b) => b.n - a.n || b.c.pts - a.c.pts);
+  const skippedHtml = skipped.length ? `<div class="list">${skipped.slice(0, 12).map(({ c, n }) => {
+      const o = person(c.owner), b = bonusFor(c, n);
+      return `<div class="chore overdue"><div class="chore-main"><span class="chore-name">${esc(c.name)}</span>
+        <span class="chore-sub"><span>${esc(c.room)}</span><span aria-hidden="true">·</span><span class="owner-tag"><span class="dot" style="${pVars(o)}"></span>${esc(o.id)}</span><span aria-hidden="true">·</span><span class="skipped">${skipText(c, n)}</span></span></div>
+        <span class="pts-stack">${ptsHtml(c.pts + b)}<span class="bonus">+${b} bonus</span></span></div>`;
+    }).join('')}</div>${skipped.length > 12 ? `<p class="sum-meta">${skipped.length - 12} more skipped chores aren't shown.</p>` : ''}`
+    : '<div class="list"><div class="empty">Nothing is being skipped right now.</div></div>';
+
+  // Grid of the last few periods for each chore
+  const cell = (c, d, isCurrent) => {
+    const r = m.get(docId(c, d));
+    if (r) { const p = person(r.person); return `<span class="cell done" style="${pVars(p)}" title="${esc(p.id)}" role="img" aria-label="Done by ${esc(p.id)}"></span>`; }
+    // Older than the loaded window, but the sheet says it was done in this period.
+    if (lastDone[c.id] && periodKey(c.freq, parseDay(lastDone[c.id])) === periodKey(c.freq, d)) return '<span class="cell done" style="--pc:var(--muted)" role="img" aria-label="Done"></span>';
+    const periodEnd = c.freq === 'd' ? dayKey(d) : c.freq === 'w' ? dayKey(addDays(weekStart(d), 6)) : dayKey(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+    if (periodEnd < start) return '<span class="cell na" role="img" aria-label="Before the board started"></span>';
+    if (isCurrent) return '<span class="cell open" role="img" aria-label="Not done yet"></span>';
+    return '<span class="cell miss" role="img" aria-label="Skipped"></span>';
+  };
+  const grid = (freq, cols, label) => {
+    const list = CHORES.filter(c => c.freq === freq);
+    if (!list.length) return '';
+    const head = cols.map((d, i) => `<th class="${i === cols.length - 1 ? 'today' : ''}">${label(d)}</th>`).join('');
+    const rows = list.map(c => { const o = person(c.owner); return `<tr><td class="name"><span class="dot" style="${pVars(o)}"></span>${esc(c.name)}</td>${cols.map((d, i) => `<td>${cell(c, d, i === cols.length - 1)}</td>`).join('')}</tr>`; }).join('');
+    return `<div class="grid-wrap"><table class="grid"><thead><tr><th class="name">Chore</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  };
+  const dayCols = [...Array(14)].map((_, i) => addDays(now, i - 13));
+  const weekCols = [...Array(5)].map((_, i) => addDays(weekStart(now), (i - 4) * 7));
+  const monthCols = [1, 0].map(k => new Date(now.getFullYear(), now.getMonth() - k, 1));
+
+  // Day-by-day log of what got done
+  const byDay = new Map();
+  for (const r of [...m.values()].sort((a, b) => b.ts - a.ts)) {
+    if (r.date < dayKey(addDays(now, -6))) continue;
+    if (!byDay.has(r.date)) byDay.set(r.date, []);
+    byDay.get(r.date).push(r);
+  }
+  const log = byDay.size ? [...byDay.entries()].map(([k, rs]) => {
+    const total = rs.reduce((t, r) => t + (Number(r.pts) || 0), 0);
+    const title = k === today ? 'Today' : k === dayKey(addDays(now, -1)) ? 'Yesterday' : parseDay(k).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+    return `<div class="log-day"><h3>${esc(title)} · ${rs.length} chore${rs.length === 1 ? '' : 's'} · ★ ${total}</h3><div class="feed">${rs.map(r => {
+      const p = person(r.person), ch = CBY[r.chore], t = new Date(Number(r.ts));
+      return `<div class="feed-row">${avatar(p)}<span class="txt"><strong>${esc(p.id)}</strong> ${esc(ch ? ch.name.charAt(0).toLowerCase() + ch.name.slice(1) : 'a chore that was removed')}${ch ? ` <span style="color:var(--muted)">· ${esc(ch.room)}</span>` : ''}</span>${ptsHtml(r.pts)}${r.bonus ? `<span class="bonus">+${r.bonus}</span>` : ''}<time>${esc(t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</time></div>`;
+    }).join('')}</div></div>`;
+  }).join('') : '<div class="feed"><div class="empty">Nothing checked off in the last 7 days.</div></div>';
+
+  document.getElementById('view-history').innerHTML = `
+    <div class="group"><div class="group-head"><h2>Last 7 days</h2><span>Each person's own daily chores</span></div><div class="summary">${rates}</div></div>
+    <div class="group"><div class="group-head"><h2>Being skipped</h2><span>${skipped.length} chore${skipped.length === 1 ? '' : 's'} · bonus grows each time</span></div>${skippedHtml}</div>
+    <div class="legend"><span><span class="cell done" style="--pc:var(--muted)"></span>Done (color shows who)</span><span><span class="cell miss"></span>Skipped</span><span><span class="cell open"></span>Not done yet</span><span><span class="cell na"></span>Before the board started</span></div>
+    <div class="group"><div class="group-head"><h2>Daily chores</h2><span>Last 14 days</span></div>${grid('d', dayCols, d => `${d.toLocaleDateString([], { weekday: 'narrow' })}<br>${d.getDate()}`)}</div>
+    <div class="group"><div class="group-head"><h2>Weekly chores</h2><span>Last 5 weeks, by Monday</span></div>${grid('w', weekCols, shortDay)}</div>
+    <div class="group"><div class="group-head"><h2>Monthly chores</h2><span>Last 2 months</span></div>${grid('m', monthCols, d => d.toLocaleDateString([], { month: 'short' }))}</div>
+    <div class="group"><div class="group-head"><h2>Daily log</h2><span>Everything checked off in the last 7 days</span></div>${log}</div>`;
 }
 
 // ---------- Plan ----------
@@ -486,7 +614,8 @@ function renderPlan() {
   document.getElementById('view-plan').innerHTML = `
     <div class="plan-intro"><h2>How the board works</h2>
       <p>Every chore has an owner and a point value: 5 for quick jobs, 10 to 15 for medium ones, 20 to 30 for big cleans. Daily chores reset at midnight, weekly ones on Monday, monthly ones on the 1st.</p>
-      <p>Anyone can do anyone's chore. Whoever checks it off gets the points. To change chores, owners or points, edit the Chores tab in the Google Sheet.</p></div>
+      <p>Anyone can do anyone's chore. Whoever checks it off gets the points. To change chores, owners or points, edit the Chores tab in the Google Sheet.</p>
+      <p>Skipped chores get more valuable. Each day, week or month a chore is skipped adds half its points as a bonus, up to triple points. A 10-point chore skipped twice is worth 20. The bonus goes to whoever finally does it.</p></div>
     <div class="balance">${bal}</div>
     <div class="legend">${PEOPLE.map(p => `<span class="owner-tag"><span class="dot" style="${pVars(p)}"></span>${esc(p.id)}</span>`).join('')}<span>★ points</span></div>
     <div class="rooms">${rooms}</div>`;
@@ -516,7 +645,7 @@ function renderSetup() {
 // ---------- Render ----------
 function render() {
   const now = new Date(), m = completions();
-  for (const v of ['today', 'scores', 'plan', 'setup']) {
+  for (const v of ['today', 'scores', 'history', 'plan', 'setup']) {
     document.getElementById('view-' + v).hidden = v !== view;
     document.getElementById('tab-' + v).setAttribute('aria-selected', String(v === view));
   }
@@ -532,10 +661,11 @@ function render() {
   st.hidden = !msg; st.textContent = msg;
   if (view === 'today') renderToday(m, now);
   else if (view === 'scores') renderScores(m, now);
+  else if (view === 'history') renderHistory(m, now);
   else if (view === 'plan') renderPlan();
   else renderSetup();
 }
-function setView(v) { view = ['today', 'scores', 'plan', 'setup'].includes(v) ? v : 'today'; render(); window.scrollTo(0, 0); }
+function setView(v) { view = ['today', 'scores', 'history', 'plan', 'setup'].includes(v) ? v : 'today'; render(); window.scrollTo(0, 0); }
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => setView(t.dataset.view));
 
 // ---------- Actions ----------
@@ -543,7 +673,8 @@ let pickFor = null;
 function complete(choreId, who) {
   const c = CBY[choreId]; if (!c) return;
   const now = new Date();
-  const record = { id: docId(c, now), chore: c.id, person: who, pts: c.pts, period: periodKey(c.freq, now), date: dayKey(now), ts: now.getTime() };
+  const bonus = bonusFor(c, skips(c, completions(), now));
+  const record = { id: docId(c, now), chore: c.id, person: who, pts: c.pts + bonus, bonus, period: periodKey(c.freq, now), date: dayKey(now), ts: now.getTime() };
   if (!api) { server.set(record.id, record); render(); return; }
   queue({ op: 'done', record });
 }
