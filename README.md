@@ -51,8 +51,9 @@ Every check-off is a row on the **Completions** tab, so the sheet is also a full
 
 ## History and bonus points
 
-- The **History** tab shows each person's daily-chore rate for the last 7 days, the chores being skipped, a done/skipped grid for every chore, and a day-by-day log.
-- Each day, week or month a chore is skipped adds half its points as a bonus, up to triple points after 4 skips. The bonus goes to whoever finally does it and is recorded in the **Bonus** column of the Completions tab.
+- The **History** tab shows each person's daily-chore rate for the last 7 days, the chores being skipped (with when each was last done), and a day-by-day log of the last 14 days.
+- Each day the board picks 3 **bonus chores** from the ones that were skipped, or that haven't been done yet this week or month. A bonus chore is worth 25% more, or 50% more if it was skipped two or more times in a row. The picks rotate daily, and every device shows the same ones.
+- Bonuses are recorded in the **Bonus** column of the Completions tab.
 - A new chore added to the sheet counts as skipped from the board's first day until someone does it once.
 
 ## Privacy
