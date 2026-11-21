@@ -85,7 +85,13 @@ main { padding-top: 18px; padding-bottom: calc(40px + env(safe-area-inset-bottom
 .goal-num { font-variant-numeric: tabular-nums; font-weight: 600; }
 .goal-row.met .goal-num, .goal-row.met .goal-status { color: var(--done); }
 .goal-status { font-weight: 600; }
-.goal-reward { color: var(--ink); }
+.goal-reward { color: var(--fg); }
+.goal-edit h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1rem; }
+.goal-fields { display: grid; grid-template-columns: 7.5em 1fr; gap: 6px 8px; align-items: center; }
+.goal-fields label { font-weight: 600; font-size: 0.9rem; }
+.goal-fields input { width: 100%; min-width: 0; border-radius: 10px; }
+.goal-fields .goal-hint { grid-column: 2; margin-top: -2px; }
+.goal-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .bar > span { display: block; height: 100%; background: var(--pc); border-radius: 999px; transition: width .3s; }
 .sum-meta { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
@@ -171,7 +177,7 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
 .pick button { border: 2px solid var(--pc); background: var(--pbg); border-radius: 16px; padding: 14px 6px; display: grid; justify-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
 .pick .avatar { width: 52px; height: 52px; font-size: 1.5rem; }
 .sheet .date-row { display: flex; justify-content: center; align-items: center; gap: 10px; font-weight: 600; }
-.sheet .date-row input { font: inherit; font-size: 1rem; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--ink); }
+.sheet .date-row input { font: inherit; font-size: 1rem; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--fg); }
 .sheet .note { color: var(--warn); font-size: 0.9rem; }
 .sheet .cancel { background: none; border: 0; color: var(--muted); padding: 8px; min-height: 44px; }
 
@@ -666,7 +672,37 @@ function earnedPts(m, who, f, now) {
   for (const r of m.values()) if (String(r.period) === key && (who === 'Family' || r.person === who)) t += Number(r.pts) || 0;
   return t;
 }
+let goalsEditing = false;
+const GOAL_OK = /^\s*(\d+(\.\d+)?\s*%?)?\s*$/;
+const GOAL_KINDS = [['d', 'Daily'], ['w', 'Weekly'], ['m', 'Monthly']];
+function goalHint(who, f, v, now) {
+  if (!GOAL_OK.test(v)) return 'Use points like 40 or a percent like 80%.';
+  const t = goalTarget(v, possiblePts(who, f, now));
+  return t ? `About ★ ${t} ${f === 'd' ? 'today' : f === 'w' ? 'this week' : 'this month'}` : 'No goal';
+}
+function renderGoalsEditor(now) {
+  const rows = GOALS || DEFAULT_GOALS;
+  const cards = PEOPLE.map(p => p.id).concat(['Family']).map(who => {
+    const g = rows.find(r => r.who === who) || { who }, p = who === 'Family' ? FAMILY : person(who), key = esc(who);
+    return `<div class="sum-card goal-card goal-edit" style="${pVars(p)}" data-who="${key}">
+      <h3>${avatar(p)}${esc(who === 'Family' ? 'Whole family' : who)}</h3>
+      ${GOAL_KINDS.map(([f, label]) => `<div class="goal-fields">
+        <label for="g-${key}-${f}">${label} goal</label><input type="text" id="g-${key}-${f}" data-f="${f}" inputmode="decimal" autocomplete="off" value="${esc(g[f] || '')}" placeholder="None">
+        <span class="sum-meta goal-hint" data-hint="${f}">${esc(goalHint(who, f, g[f] || '', now))}</span>
+        <label for="g-${key}-${f}r">Reward</label><input type="text" id="g-${key}-${f}r" data-f="${f}r" maxlength="80" autocomplete="off" value="${esc(g[f + 'r'] || '')}" placeholder="Optional">
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+  document.getElementById('view-goals').innerHTML = `<form id="goals-form" class="group">
+    <div class="group-head"><h2>Edit goals</h2><span>Saved to the Google Sheet for every device</span></div>
+    <p class="sum-meta">A goal can be points, like 40, or a percent of what that person's own jobs are worth in that period, like 80%. Leave it blank for no goal. Daily jobs count toward the daily goal, weekly jobs toward weekly, monthly jobs toward monthly.</p>
+    <div class="goals">${cards}</div>
+    <p class="err" id="goals-err" hidden></p>
+    <div class="goal-actions"><button class="btn" type="submit">Save goals</button><button class="btn ghost" type="button" id="goals-cancel">Cancel</button></div>
+  </form>`;
+}
 function renderGoals(m, now) {
+  if (goalsEditing) { if (!document.getElementById('goals-form')) renderGoalsEditor(now); return; } // keep what's being typed
   const wk = weekStart(now), plural = n => n === 1 ? '' : 's';
   const leftW = 7 - Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - wk) / 864e5);
   const leftM = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1;
@@ -694,9 +730,9 @@ function renderGoals(m, now) {
       ${lines}</div>`;
   }).join('');
   document.getElementById('view-goals').innerHTML = `
-    <div class="group"><div class="group-head"><h2>Goals</h2><span>Bonus points count too</span></div>
+    <div class="group"><div class="group-head"><h2>Goals</h2><button class="btn ghost" type="button" id="goals-edit">Edit goals</button></div>
       <div class="goals">${cards || '<div class="list"><div class="empty">No goals set. Add them on the Goals tab of the Google Sheet.</div></div>'}</div></div>
-    <p class="sum-meta">Daily jobs count toward the daily goal, weekly jobs toward the weekly goal and monthly jobs toward the monthly goal. Points go to whoever checks a job off. The whole-family goal adds up everyone's points. To change goals or add rewards, edit the Goals tab in the Google Sheet. A goal can be points, like 40, or a percent of what that person's jobs are worth, like 80%.</p>`;
+    <p class="sum-meta">Daily jobs count toward the daily goal, weekly jobs toward the weekly goal and monthly jobs toward the monthly goal. Points go to whoever checks a job off. The whole-family goal adds up everyone's points. Bonus points count too. Tap <strong>Edit goals</strong> to change goals or rewards for everyone.</p>`;
 }
 
 // ---------- Plan ----------
@@ -835,6 +871,8 @@ document.getElementById('main').addEventListener('click', async e => {
     queue({ op: 'undo', id });
     return;
   }
+  if (e.target.id === 'goals-edit') { goalsEditing = true; render(); return; }
+  if (e.target.id === 'goals-cancel') { goalsEditing = false; render(); return; }
   if (e.target.id === 'update-check') { const n = document.getElementById('update-note'); n.textContent = 'Checking…'; checkForUpdate(true, n); return; }
   if (e.target.id === 'copy-link') {
     const link = `${location.origin}${location.pathname}#setup=${encodeURIComponent(api)}`;
@@ -844,6 +882,23 @@ document.getElementById('main').addEventListener('click', async e => {
   }
 });
 document.getElementById('main').addEventListener('change', e => { if (e.target.id === 'room-filter') { roomFilter = e.target.value; render(); } });
+document.getElementById('main').addEventListener('input', e => {
+  const card = e.target.closest('.goal-edit'), f = e.target.dataset && e.target.dataset.f;
+  if (card && f && f.length === 1) card.querySelector(`[data-hint="${f}"]`).textContent = goalHint(card.dataset.who, f, e.target.value, new Date());
+});
+document.getElementById('main').addEventListener('submit', e => {
+  if (e.target.id !== 'goals-form') return;
+  e.preventDefault();
+  const goals = [...e.target.querySelectorAll('.goal-edit')].map(card => {
+    const g = { who: card.dataset.who };
+    card.querySelectorAll('input[data-f]').forEach(i => { g[i.dataset.f] = i.value.trim().replace(/\s+/g, ' '); });
+    return g;
+  });
+  const bad = goals.find(g => GOAL_KINDS.some(([f]) => !GOAL_OK.test(g[f])));
+  if (bad) { const err = document.getElementById('goals-err'); err.hidden = false; err.textContent = `Check ${bad.who === 'Family' ? 'the family' : bad.who + "'s"} goals. Use points like 40 or a percent like 80%.`; return; }
+  GOALS = goals; goalsEditing = false;
+  if (api) queue({ op: 'goals', goals }); else render();
+});
 document.getElementById('main').addEventListener('submit', async e => {
   if (e.target.id !== 'setup-form') return;
   e.preventDefault();
@@ -860,7 +915,7 @@ document.getElementById('main').addEventListener('submit', async e => {
 // A Home Screen app stays in memory and never reloads on its own, so new versions of this page would never show up.
 // Every few minutes (and whenever the app comes back to the front) fetch the published page, and reload if its BUILD
 // is newer. Bump BUILD on every change to this file.
-const BUILD = '2026-11-21.2';
+const BUILD = '2026-11-21.3';
 let lastUpdateCheck = 0;
 async function checkForUpdate(force, note) {
   if (!force && Date.now() - lastUpdateCheck < 5 * 60000) return;

@@ -21,7 +21,7 @@ User-facing setup and usage docs are in `README.md`. Private links (sheet ID, sc
 
 **Apps Script API:**
 - `GET ?since=YYYY-MM-DD` returns `{ok, people, chores, completions (date >= since), last: {choreId: lastDate}, first: firstDate, goals}`.
-- `POST` (body sent as `text/plain` to avoid a CORS preflight) accepts `{op: 'done', record}`, `{op: 'undo', id}` or `{op: 'seed', chores}`, and returns the same state. `seed` only writes when the Chores tab is empty. A blank chore ID gets filled in on read.
+- `POST` (body sent as `text/plain` to avoid a CORS preflight) accepts `{op: 'done', record}`, `{op: 'undo', id}`, `{op: 'goals', goals}` (rewrites each Who's row on the Goals tab as text) or `{op: 'seed', chores}`, and returns the same state. `seed` only writes when the Chores tab is empty. A blank chore ID gets filled in on read.
 
 **Web app (`docs/index.html`):**
 - The API URL lives in each device's `localStorage` (`chores.api`), set from the Setup tab or a `#setup=<encoded exec URL>` link. `validApi()` also accepts `http://localhost:<port>/exec` when the page itself runs on localhost.
@@ -35,7 +35,7 @@ User-facing setup and usage docs are in `README.md`. Private links (sheet ID, sc
 - **Wording:** the UI says "Family Jobs" and "jobs" (user asked for something more kid-friendly than chores). Code, sheet tab and IDs still say chores.
 - **Done earlier?:** weekly/monthly rows have a link that opens the picker with a date (back 35 days, or 92 for monthly). It posts a normal `done` record dated that day, with no bonus.
 - **Taking turns:** Owner can be `Tracy/Billy` (split on `/ , & + and`). `ownerOn(c, date)` picks `owners[(periodIndex - periodIndex(ROT_ANCHOR)) % n]`, where ROT_ANCHOR is 2026-11-16. Use `ownerOn`, never `c.owner`, for anything per person. Every Tracy and Billy job takes turns except their personal ones (papers, living-room pickup, closet). The user wanted this so nobody gets stuck with the same jobs.
-- **Goals tab (view):** `renderGoals()`. Earned is the sum of `pts` for completions whose `period` matches the current D/W/M period (so a job counts toward its own frequency's goal), by `person`, or everyone for Family. A % goal is that share of `possiblePts()`, which is the jobs whose `ownerOn` today is that person (daily jobs only if available today). `DEFAULT_GOALS` is used when the sheet sends none.
+- **Goals tab (view):** `renderGoals()`. Earned is the sum of `pts` for completions whose `period` matches the current D/W/M period (so a job counts toward its own frequency's goal), by `person`, or everyone for Family. A % goal is that share of `possiblePts()`, which is the jobs whose `ownerOn` today is that person (daily jobs only if available today). `DEFAULT_GOALS` is used when the sheet sends none. **Edit goals** opens `renderGoalsEditor()`. While editing, `renderGoals` doesn't re-render, so the 20 s sync doesn't wipe typing. Save queues `{op:'goals'}` and sets GOALS right away.
 - **History tab:** 7-day rates for each person's own daily chores, the "Being skipped" list, and a 14-day daily log.
 
 ## Decisions the user made (keep these)

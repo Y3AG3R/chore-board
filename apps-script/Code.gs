@@ -17,6 +17,7 @@ const DONE_TAB = 'Completions';
 const CHORE_HEADERS = ['Room', 'Chore', 'Frequency', 'Points', 'Owner', 'ID', 'Days'];
 const DONE_HEADERS = ['ID', 'Chore ID', 'Person', 'Points', 'Period', 'Date', 'Time', 'Bonus'];
 const GOALS_TAB = 'Goals';
+const GOALS_HEADERS = ['Who', 'Daily goal', 'Weekly goal', 'Monthly goal', 'Daily reward', 'Weekly reward', 'Monthly reward'];
 const PEOPLE = ['Tracy', 'Billy', 'Vivian'];
 // Leave blank when the script is opened from the sheet (Extensions > Apps Script).
 // For a standalone script, paste the sheet's ID from its URL: docs.google.com/spreadsheets/d/<ID>/edit
@@ -38,6 +39,7 @@ function doPost(e) {
     if (body.op === 'done') markDone_(body.record || {});
     else if (body.op === 'undo') undo_(String(body.id || ''));
     else if (body.op === 'seed') seed_(body.chores || []);
+    else if (body.op === 'goals') setGoals_(body.goals || []);
   } finally {
     lock.releaseLock();
   }
@@ -130,6 +132,27 @@ function readGoals_() {
   return sh.getRange(2, 1, sh.getLastRow() - 1, 7).getDisplayValues()
     .filter(function (r) { const w = String(r[0]).trim(); return w === 'Family' || PEOPLE.indexOf(w) >= 0; })
     .map(function (r) { return { who: String(r[0]).trim(), d: r[1], w: r[2], m: r[3], dr: r[4], wr: r[5], mr: r[6] }; });
+}
+
+// Saves goals edited in the app: one row per person or Family. Cells are stored as text so "80%" stays "80%".
+function setGoals_(goals) {
+  const sh = tab_(GOALS_TAB, GOALS_HEADERS);
+  const n = Math.max(sh.getLastRow() - 1, 0);
+  const whoCol = n ? sh.getRange(2, 1, n, 1).getDisplayValues().map(function (r) { return String(r[0]).trim(); }) : [];
+  const clean = function (v) { return String(v == null ? '' : v).trim().slice(0, 80); };
+  goals.forEach(function (g) {
+    const who = clean(g.who);
+    if (who !== 'Family' && PEOPLE.indexOf(who) < 0) return;
+    let i = whoCol.indexOf(who);
+    if (i < 0) {
+      let after = 1;
+      whoCol.forEach(function (w, j) { if (w === 'Family' || PEOPLE.indexOf(w) >= 0) after = j + 2; });
+      sh.insertRowAfter(after);
+      whoCol.splice(after - 1, 0, who);
+      i = after - 1;
+    }
+    sh.getRange(i + 2, 1, 1, 7).setNumberFormat('@').setValues([[who, clean(g.d), clean(g.w), clean(g.m), clean(g.dr), clean(g.wr), clean(g.mr)]]);
+  });
 }
 
 function markDone_(rec) {
