@@ -8,12 +8,15 @@
  *   Chores       Room | Chore | Frequency | Points | Owner | ID | Days   (edit this tab to change the plan;
  *                Days is optional, e.g. "Mon, Tue" for a chore that can only be done on those days)
  *   Completions  ID | Chore ID | Person | Points | Period | Date | Time | Bonus
+ *   Goals        Who | Daily goal | Weekly goal | Monthly goal | Daily reward | Weekly reward | Monthly reward
+ *                (optional; a goal is points like 40 or a percent like 80%. Who is a person or Family)
  */
 
 const CHORES_TAB = 'Chores';
 const DONE_TAB = 'Completions';
 const CHORE_HEADERS = ['Room', 'Chore', 'Frequency', 'Points', 'Owner', 'ID', 'Days'];
 const DONE_HEADERS = ['ID', 'Chore ID', 'Person', 'Points', 'Period', 'Date', 'Time', 'Bonus'];
+const GOALS_TAB = 'Goals';
 const PEOPLE = ['Tracy', 'Billy', 'Vivian'];
 // Leave blank when the script is opened from the sheet (Extensions > Apps Script).
 // For a standalone script, paste the sheet's ID from its URL: docs.google.com/spreadsheets/d/<ID>/edit
@@ -117,7 +120,16 @@ function readState_(since) {
     if (!first || c.date < first) first = c.date;
   });
   const done = all.filter(function (c) { return !since || c.date >= since; });
-  return { ok: true, people: PEOPLE, chores: readChores_(), completions: done, last: last, first: first };
+  return { ok: true, people: PEOPLE, chores: readChores_(), completions: done, last: last, first: first, goals: readGoals_() };
+}
+
+// Goals tab rows for a person or Family. Display values keep "80%" as text.
+function readGoals_() {
+  const sh = book_().getSheetByName(GOALS_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 7).getDisplayValues()
+    .filter(function (r) { const w = String(r[0]).trim(); return w === 'Family' || PEOPLE.indexOf(w) >= 0; })
+    .map(function (r) { return { who: String(r[0]).trim(), d: r[1], w: r[2], m: r[3], dr: r[4], wr: r[5], mr: r[6] }; });
 }
 
 function markDone_(rec) {

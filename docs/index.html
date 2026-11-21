@@ -77,6 +77,15 @@ main { padding-top: 18px; padding-bottom: calc(40px + env(safe-area-inset-bottom
 .pts { font-family: var(--font-display); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pts .star { color: var(--star); }
 .bar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.goal-card { gap: 10px; align-content: start; }
+.goal-row { display: grid; gap: 4px; }
+.goal-line { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.goal-label { font-weight: 600; }
+.goal-num { font-variant-numeric: tabular-nums; font-weight: 600; }
+.goal-row.met .goal-num, .goal-row.met .goal-status { color: var(--done); }
+.goal-status { font-weight: 600; }
+.goal-reward { color: var(--ink); }
 .bar > span { display: block; height: 100%; background: var(--pc); border-radius: 999px; transition: width .3s; }
 .sum-meta { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
@@ -223,6 +232,7 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
     </div>
     <nav class="tabs" role="tablist" aria-label="Views">
       <button class="tab" role="tab" id="tab-today" data-view="today">Today</button>
+      <button class="tab" role="tab" id="tab-goals" data-view="goals">Goals</button>
       <button class="tab" role="tab" id="tab-scores" data-view="scores">Scores</button>
       <button class="tab" role="tab" id="tab-history" data-view="history">History</button>
       <button class="tab" role="tab" id="tab-plan" data-view="plan">Plan</button>
@@ -234,6 +244,7 @@ select, input[type="url"], input[type="text"] { font: inherit; font-size: 16px; 
 <main class="wrap" id="main">
   <div class="banner" id="status" hidden></div>
   <section id="view-today" hidden></section>
+  <section id="view-goals" hidden></section>
   <section id="view-scores" hidden></section>
   <section id="view-history" hidden></section>
   <section id="view-plan" hidden></section>
@@ -301,6 +312,7 @@ const store = {
 
 // ---------- State ----------
 let CHORES = STARTER_CHORES, CBY = {}, ROOMS = [];
+let GOALS = null;            // rows from the sheet's Goals tab (null until the sheet sends them)
 let lastDone = {}, boardStart = ''; // from the sheet: last date each chore was done, first day of the board
 let server = new Map();      // completions from the sheet: id -> record
 let pending = [];            // ops not yet confirmed: {op:'done', record} | {op:'undo', id}
@@ -335,7 +347,7 @@ function completions() {
 // Restore the last copy so the board shows instantly.
 try {
   const cached = JSON.parse(store.get('cache') || 'null');
-  if (cached) { setChores(cached.chores); server = new Map(cached.completions.map(c => [c.id, c])); lastSync = cached.at || 0; lastDone = cached.last || {}; boardStart = cached.first || ''; }
+  if (cached) { setChores(cached.chores); server = new Map(cached.completions.map(c => [c.id, c])); lastSync = cached.at || 0; lastDone = cached.last || {}; boardStart = cached.first || ''; GOALS = cached.goals || null; }
   else setChores(null);
   pending = JSON.parse(store.get('pending') || '[]');
 } catch (e) { setChores(null); }
@@ -362,8 +374,8 @@ function applyState(s) {
   setChores(s.chores);
   server = new Map((s.completions || []).map(c => [c.id, c]));
   lastSync = Date.now(); syncState = 'ok';
-  lastDone = s.last || {}; boardStart = s.first || '';
-  store.set('cache', JSON.stringify({ chores: s.chores, completions: s.completions, at: lastSync, last: lastDone, first: boardStart }));
+  lastDone = s.last || {}; boardStart = s.first || ''; GOALS = s.goals && s.goals.length ? s.goals : null;
+  store.set('cache', JSON.stringify({ chores: s.chores, completions: s.completions, at: lastSync, last: lastDone, first: boardStart, goals: GOALS }));
 }
 async function call(body) {
   const opts = body
@@ -634,6 +646,59 @@ function renderHistory(m, now) {
     <div class="group"><div class="group-head"><h2>Daily log</h2><span>Everything checked off in the last 14 days</span></div>${log}</div>`;
 }
 
+// ---------- Goals ----------
+// Set on the sheet's Goals tab. A goal is points ("40") or a percent of the points that person's own jobs
+// are worth in that period ("80%"). Daily jobs count toward the daily goal, weekly toward weekly, monthly toward monthly.
+const DEFAULT_GOALS = PEOPLE.map(p => ({ who: p.id, d: '80%', w: '75%', m: '70%' })).concat([{ who: 'Family', d: '', w: '75%', m: '70%' }]);
+const FAMILY = { id: 'Family', color: 'var(--accent)', bg: 'var(--all-bg)' };
+function goalTarget(v, possible) {
+  const s = String(v == null ? '' : v).trim();
+  const n = parseFloat(s.replace(/[^\d.]/g, ''));
+  if (!s || !(n > 0)) return 0;
+  return Math.max(1, Math.round(s.includes('%') ? possible * n / 100 : n <= 1 ? possible * n : n));
+}
+function possiblePts(who, f, now) {
+  return CHORES.filter(c => c.freq === f && (who === 'Family' || ownerOn(c, now) === who) && (f !== 'd' || availableOn(c, now))).reduce((t, c) => t + c.pts, 0);
+}
+function earnedPts(m, who, f, now) {
+  const key = periodKey(f, now);
+  let t = 0;
+  for (const r of m.values()) if (String(r.period) === key && (who === 'Family' || r.person === who)) t += Number(r.pts) || 0;
+  return t;
+}
+function renderGoals(m, now) {
+  const wk = weekStart(now), plural = n => n === 1 ? '' : 's';
+  const leftW = 7 - Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - wk) / 864e5);
+  const leftM = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1;
+  const periods = [['d', 'Today', 'Daily jobs', 'resets at midnight'], ['w', 'This week', 'Weekly jobs', `${leftW} day${plural(leftW)} left`], ['m', now.toLocaleDateString([], { month: 'long' }), 'Monthly jobs', `${leftM} day${plural(leftM)} left`]];
+  const rows = GOALS || DEFAULT_GOALS;
+  const order = PEOPLE.map(p => p.id).concat(['Family']);
+  const cards = order.map(who => {
+    const g = rows.find(r => r.who === who); if (!g) return '';
+    const p = who === 'Family' ? FAMILY : person(who);
+    let met = 0, total = 0;
+    const lines = periods.map(([f, label, kind, left]) => {
+      const target = goalTarget(g[f], possiblePts(who, f, now)); if (!target) return '';
+      const got = earnedPts(m, who, f, now), ok = got >= target, pct = Math.min(100, Math.round(got / target * 100));
+      const reward = String(g[f + 'r'] || '').trim();
+      total++; if (ok) met++;
+      return `<div class="goal-row${ok ? ' met' : ''}">
+        <div class="goal-line"><span class="goal-label">${esc(label)}</span><span class="goal-num">★ ${got} / ${target}</span></div>
+        <div class="bar" role="img" aria-label="${pct}% of the ${esc(label.toLowerCase())} goal"><span style="width:${pct}%"></span></div>
+        <div class="sum-meta"><span class="goal-status">${ok ? 'Goal met!' : `${target - got} to go`}</span> · ${esc(kind)} · ${esc(left)}${reward ? ` · <span class="goal-reward">Reward: ${esc(reward)}</span>` : ''}</div>
+      </div>`;
+    }).join('');
+    if (!total) return '';
+    return `<div class="sum-card goal-card" style="${pVars(p)}">
+      <div class="sum-top"><span class="sum-name">${avatar(p)}${esc(who === 'Family' ? 'Whole family' : who)}</span><span class="sum-meta">${met} of ${total} met</span></div>
+      ${lines}</div>`;
+  }).join('');
+  document.getElementById('view-goals').innerHTML = `
+    <div class="group"><div class="group-head"><h2>Goals</h2><span>Bonus points count too</span></div>
+      <div class="goals">${cards || '<div class="list"><div class="empty">No goals set. Add them on the Goals tab of the Google Sheet.</div></div>'}</div></div>
+    <p class="sum-meta">Daily jobs count toward the daily goal, weekly jobs toward the weekly goal and monthly jobs toward the monthly goal. Points go to whoever checks a job off. The whole-family goal adds up everyone's points. To change goals or add rewards, edit the Goals tab in the Google Sheet. A goal can be points, like 40, or a percent of what that person's jobs are worth, like 80%.</p>`;
+}
+
 // ---------- Plan ----------
 function renderPlan() {
   const bal = PEOPLE.map(p => {
@@ -685,7 +750,7 @@ function renderSetup() {
 // ---------- Render ----------
 function render() {
   const now = new Date(), m = completions();
-  for (const v of ['today', 'scores', 'history', 'plan', 'setup']) {
+  for (const v of ['today', 'goals', 'scores', 'history', 'plan', 'setup']) {
     document.getElementById('view-' + v).hidden = v !== view;
     document.getElementById('tab-' + v).setAttribute('aria-selected', String(v === view));
   }
@@ -700,12 +765,13 @@ function render() {
     : syncState === 'error' && view !== 'setup' ? 'Can\'t reach the Google Sheet. Check-offs will be saved when the connection comes back.' : '';
   st.hidden = !msg; st.textContent = msg;
   if (view === 'today') renderToday(m, now);
+  else if (view === 'goals') renderGoals(m, now);
   else if (view === 'scores') renderScores(m, now);
   else if (view === 'history') renderHistory(m, now);
   else if (view === 'plan') renderPlan();
   else renderSetup();
 }
-function setView(v) { view = ['today', 'scores', 'history', 'plan', 'setup'].includes(v) ? v : 'today'; render(); window.scrollTo(0, 0); }
+function setView(v) { view = ['today', 'goals', 'scores', 'history', 'plan', 'setup'].includes(v) ? v : 'today'; render(); window.scrollTo(0, 0); }
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => setView(t.dataset.view));
 
 // ---------- Actions ----------

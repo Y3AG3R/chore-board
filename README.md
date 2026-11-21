@@ -51,6 +51,12 @@ Edit the **Chores** tab in the Google Sheet. Each row is one chore:
 
 Every check-off is a row on the **Completions** tab, so the sheet is also a full history.
 
+## Goals
+
+The **Goals** tab on the board shows daily, weekly and monthly goals for each person, plus a whole-family goal. Daily jobs count toward the daily goal, weekly jobs toward the weekly goal, and monthly jobs toward the monthly goal. Points (bonus included) go to whoever checked the job off.
+
+Set goals and rewards on the sheet's **Goals** tab: `Who | Daily goal | Weekly goal | Monthly goal | Daily reward | Weekly reward | Monthly reward`. Who is a person or `Family`. A goal is points (`40`) or a percent of what that person's own jobs are worth in that period (`80%`). Leave a cell blank for no goal. Without a Goals tab the board uses 80% / 75% / 70%.
+
 ## History and bonus points
 
 - The **History** tab shows each person's daily-chore rate for the last 7 days, the chores being skipped (with when each was last done), and a day-by-day log of the last 14 days.
