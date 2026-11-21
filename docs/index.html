@@ -738,6 +738,9 @@ function renderSetup() {
       </form>
       <p class="err" id="setup-err" hidden></p>
       ${api ? `<div><button class="btn ghost" id="copy-link" type="button">Copy setup link for another device</button> <span class="sum-meta" id="copy-note"></span></div>` : ''}
+      <h3>App version</h3>
+      <p>Version ${esc(BUILD)}. The board checks for a new version every few minutes and whenever it's opened, and reloads itself.</p>
+      <div><button class="btn ghost" id="update-check" type="button">Check for updates</button> <span class="sum-meta" id="update-note"></span></div>
       <h3>Add to the Home Screen</h3>
       <ol>
         <li>Open this page in Safari.</li>
@@ -832,6 +835,7 @@ document.getElementById('main').addEventListener('click', async e => {
     queue({ op: 'undo', id });
     return;
   }
+  if (e.target.id === 'update-check') { const n = document.getElementById('update-note'); n.textContent = 'Checking…'; checkForUpdate(true, n); return; }
   if (e.target.id === 'copy-link') {
     const link = `${location.origin}${location.pathname}#setup=${encodeURIComponent(api)}`;
     const note = document.getElementById('copy-note');
@@ -852,12 +856,36 @@ document.getElementById('main').addEventListener('submit', async e => {
   else { const e2 = document.getElementById('setup-err'); e2.hidden = false; e2.textContent = 'Couldn\'t reach that link. Check that the deployment\'s access is set to Anyone.'; }
 });
 
+// ---------- Updates ----------
+// A Home Screen app stays in memory and never reloads on its own, so new versions of this page would never show up.
+// Every few minutes (and whenever the app comes back to the front) fetch the published page, and reload if its BUILD
+// is newer. Bump BUILD on every change to this file.
+const BUILD = '2026-11-21.2';
+let lastUpdateCheck = 0;
+async function checkForUpdate(force, note) {
+  if (!force && Date.now() - lastUpdateCheck < 5 * 60000) return;
+  lastUpdateCheck = Date.now();
+  try {
+    const r = await fetch(location.pathname + '?check=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const m = (await r.text()).match(/const BUILD = '([^']+)'/);
+    if (!m || m[1] === BUILD) { if (note) note.textContent = 'This is the newest version.'; return; }
+    if (pickFor) { lastUpdateCheck = 0; return; } // don't reload while someone is picking a name
+    let tried = ''; try { tried = sessionStorage.getItem('chores.reloadFor') || ''; } catch (e) {}
+    if (tried === m[1] && !note) return; // already reloaded once for this version; avoid a loop if a cache is stale
+    try { sessionStorage.setItem('chores.reloadFor', m[1]); } catch (e) {}
+    if (note) note.textContent = 'Updating…';
+    location.replace(location.pathname + '?v=' + encodeURIComponent(m[1])); // new URL skips the browser cache
+  } catch (e) { if (note) note.textContent = 'Couldn\'t check for updates. Try again when you\'re online.'; }
+}
+
 // ---------- Start ----------
 renderWho();
 setView('today');
 sync();
-setInterval(() => { if (document.visibilityState === 'visible') sync(); }, 20000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });
+setInterval(() => { if (document.visibilityState === 'visible') { sync(); checkForUpdate(); } }, 20000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sync(); checkForUpdate(true); } });
+setTimeout(() => checkForUpdate(true), 3000);
 let lastDay = dayKey(new Date());
 setInterval(() => { const d = dayKey(new Date()); if (d !== lastDay) { lastDay = d; render(); } }, 60000);
 </script>

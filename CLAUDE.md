@@ -48,6 +48,8 @@ User-facing setup and usage docs are in `README.md`. Private links (sheet ID, sc
 
 ## Deploying
 
+**Bump `BUILD` in `docs/index.html` on every change to that file** (for example `2026-11-21.3`). Home Screen apps on iPhone and the HomeView stay in memory and never reload, so `checkForUpdate()` fetches the live page every 5 minutes and whenever the app comes to the front, compares `BUILD`, and reloads with `?v=<build>` to get past GitHub's 10-minute cache. If BUILD isn't bumped, devices keep the old code.
+
 **Website:** commit and push to `main`. Pages rebuilds in about 30–60 s. Check it with `gh api repos/Y3AG3R/chore-board/pages/builds/latest -q .status`, which should report `built`. Phones and the HomeView pick up the change on their next reload.
 
 **Apps Script:** the live script is a standalone project, not bound to the sheet. The browser pane blocks the sheet's Extensions → Apps Script pop-up, so the project is at script.google.com instead (link in `CLAUDE.local.md`). The user is signed in to Google in the built-in browser pane. To update it:
